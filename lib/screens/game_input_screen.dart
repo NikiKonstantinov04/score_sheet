@@ -6,16 +6,17 @@ import '../models/game.dart';
 
 /// Формуляр за въвеждане на нова игра.
 class GameInputScreen extends StatefulWidget {
-  /// Списък от вече заети номера на бордове в текущия мач.
-  final List<int> usedBoardNumbers;
 
-  /// Дали да показва поле за оньорни точки (HCP) – само за каре.
+  final List<int> usedBoardNumbers; //списък със записани игри
   final bool showHcpField;
+  final Game? existingGame;
 
   const GameInputScreen({
     super.key,
     this.usedBoardNumbers = const [],
     this.showHcpField = false,
+    this.existingGame,
+
   });
 
   @override
@@ -40,12 +41,28 @@ class _GameInputScreenState extends State<GameInputScreen> {
   @override
   void initState() {
     super.initState();
-    int nextBoardNumber = 1;
-    while (widget.usedBoardNumbers.contains(nextBoardNumber)) {
-      nextBoardNumber++;
+    if (widget.existingGame != null) {
+      final game = widget.existingGame!;
+      _currentBoard = game.board;
+      _boardNumberController.text = '${game.board.number}';
+      _level = game.contract.level;
+      _suit = game.contract.suit;
+      _doubled = game.contract.doubled;
+      _redoubled = game.contract.redoubled;
+      _declarer = game.declarer;
+      _tricksController.text = '${game.tricksWon}';
+      if (widget.showHcpField && game.hcp != null) {
+        _hcpController.text = '${game.hcp}';
+      }
+    } else {
+      // досегашната логика за намиране на следващ свободен номер
+      int nextBoardNumber = 1;
+      while (widget.usedBoardNumbers.contains(nextBoardNumber)) {
+        nextBoardNumber++;
+      }
+      _currentBoard = Board.auto(nextBoardNumber);
+      _boardNumberController.text = '$nextBoardNumber';
     }
-    _currentBoard = Board.auto(nextBoardNumber);
-    _boardNumberController.text = '$nextBoardNumber';
   }
 
   @override
@@ -143,7 +160,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _level,
+                    initialValue: _level,
                     hint: const Text('Ниво'),
                     decoration: const InputDecoration(
                       labelText: 'Ниво',
@@ -163,7 +180,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<Suit>(
-                    value: _suit,
+                    initialValue: _suit,
                     hint: const Text('Цвят'),
                     decoration: const InputDecoration(
                       labelText: 'Цвят',

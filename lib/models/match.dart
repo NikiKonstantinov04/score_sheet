@@ -93,4 +93,12 @@ class Match {
     }
     return match;
   }
-}
+
+  /// Заменя съществуваща игра по номер на борда.
+  /// Връща true, ако е заменена; false, ако няма такава игра.
+  bool replaceGame(int boardNumber, Game newGame) {
+    final index = _games.indexWhere((g) => g.board.number == boardNumber);
+    if (index == -1) return false;
+    _games[index] = newGame;
+    return true;
+  }}

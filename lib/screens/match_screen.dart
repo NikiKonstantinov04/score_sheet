@@ -189,6 +189,41 @@ class _MatchScreenState extends State<MatchScreen> {
     }
   }
 
+  /// Отваря формата за редактиране на съществуваща игра.
+  Future<void> _editGame(Game game) async {
+    final currentMatch = _getCurrentMatch();
+    if (currentMatch == null) return;
+
+    final usedBoardNumbers =
+    currentMatch.games.map((g) => g.board.number).toList();
+    // Премахваме текущия номер, за да не блокира, ако случайно се смени (не е възможно, но за всеки случай)
+    usedBoardNumbers.remove(game.board.number);
+
+    final editedGame = await Navigator.of(context).push<Game>(
+      MaterialPageRoute(
+        builder: (context) => GameInputScreen(
+          usedBoardNumbers: usedBoardNumbers,
+          showHcpField: widget.mode == MatchMode.singleTable,
+          existingGame: game,
+        ),
+      ),
+    );
+
+    if (editedGame == null) return;
+
+    try {
+      // Заменяме по номер на борда
+      currentMatch.replaceGame(game.board.number, editedGame);
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
   String _getSummary() {
     if (widget.mode == MatchMode.singleTable) {
       if (_singleMatch == null || _singleMatch!.games.isEmpty) {
@@ -296,11 +331,9 @@ class _MatchScreenState extends State<MatchScreen> {
                   final game = currentMatch.games[index];
                   final isPositive = game.score >= 0;
                   return Card(
-                    margin: const EdgeInsets.symmetric(
-                      vertical: 4,
-                      horizontal: 8,
-                    ),
+                    margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                     child: ListTile(
+                      onTap: () => _editGame(game),
                       leading: CircleAvatar(
                         backgroundColor:
                         Theme.of(context).colorScheme.primary.withValues(alpha:  0.15),
