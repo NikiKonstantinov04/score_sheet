@@ -1,17 +1,36 @@
-# score_sheet
+# Bridge Scorer
 
-A new Flutter project.
+Приложение за записване на резултати от спортен бридж. Позволява въвеждане на изиграните бордове, автоматично изчислява IMP резултати, поддържа режими „Каре“ и „Отборно“, и съхранява историята на мачовете локално.
 
-## Getting Started
+## Основни функции
 
-This project is a starting point for a Flutter application.
+- **Автоматично определяне на зони и дилър** за всеки борд.
+- **Режим „Каре“** – една маса с HCP задължения.
+- **Режим „Отборно“** – две маси и сравнение на резултатите.
+- **Изчисляване на IMP** според стандартната таблица.
+- **Въвеждане на договор, декларант, брой взетки, HCP**.
+- **Запазване и зареждане на множество мачове**.
+- **Редактиране и продължаване** на запазени мачове.
+- **Подробна статистика** с резултати по бордове и нетен резултат.
+- **Тъмен и светъл режим** – следва системната тема на устройството.
+- **Responsive дизайн** – адаптиран за Windows, Android, iOS (уеб) и браузър.
 
-A few resources to get you started if this is your first Flutter project:
+## Технологичен стек
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+- Flutter / Dart
+- Material 3
+- shared_preferences (локално съхранение)
+- Тестове с flutter_test
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Инсталация и стартиране
+
+### Изисквания
+- Flutter SDK 3.x или по-нова
+- Android Studio / Visual Studio (за съответните платформи)
+
+### Клониране на проекта
+
+```bash
+git clone https://github.com/NikiKonstantinov04/score_sheet.git
+cd score_sheet
+flutter pub get
