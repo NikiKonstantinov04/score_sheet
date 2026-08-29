@@ -5,6 +5,20 @@ enum Direction {
   south,
   west,
 }
+extension DirectionName on Direction {
+  String get bgName {
+    switch (this) {
+      case Direction.north:
+        return 'Север';
+      case Direction.south:
+        return 'Юг';
+      case Direction.east:
+        return 'Изток';
+      case Direction.west:
+        return 'Запад';
+    }
+  }
+}
 
 /// Цветове, включително без коз.
 enum Suit {
@@ -24,4 +38,19 @@ enum Zones {
   ns,
   ew,
   all,
+}
+
+extension ZonesName on Zones {
+  String get bgName {
+    switch (this) {
+      case Zones.none:
+        return 'Никой';
+      case Zones.ns:
+        return 'Север-Юг';
+      case Zones.ew:
+        return 'Изток-Запад';
+      case Zones.all:
+        return 'Всички';
+    }
+  }
 }

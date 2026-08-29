@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/board.dart';
-import '../models/contract.dart';
-import '../models/enums.dart';
-import '../models/game.dart';
+import '../models/models.dart';
 
 /// Формуляр за въвеждане на нова игра.
 class GameInputScreen extends StatefulWidget {
-
-  final List<int> usedBoardNumbers; //списък със записани игри
+  final List<int> usedBoardNumbers;
   final bool showHcpField;
   final Game? existingGame;
 
@@ -16,7 +12,6 @@ class GameInputScreen extends StatefulWidget {
     this.usedBoardNumbers = const [],
     this.showHcpField = false,
     this.existingGame,
-
   });
 
   @override
@@ -32,7 +27,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
 
   int? _level;
   Suit? _suit;
-  Direction _declarer = Direction.north; // non-null, начална стойност
+  Direction _declarer = Direction.north;
   bool _doubled = false;
   bool _redoubled = false;
 
@@ -55,7 +50,6 @@ class _GameInputScreenState extends State<GameInputScreen> {
         _hcpController.text = '${game.hcp}';
       }
     } else {
-      // досегашната логика за намиране на следващ свободен номер
       int nextBoardNumber = 1;
       while (widget.usedBoardNumbers.contains(nextBoardNumber)) {
         nextBoardNumber++;
@@ -73,7 +67,36 @@ class _GameInputScreenState extends State<GameInputScreen> {
     super.dispose();
   }
 
+  /// Връща цвят за съответния suit.
+  Color _suitColor(Suit suit) {
+    switch (suit) {
+      case Suit.club:
+        return Colors.grey.shade700;
+      case Suit.diamond:
+        return Colors.orange.shade700;
+      case Suit.heart:
+        return Colors.red.shade700;
+      case Suit.spade:
+        return Colors.black;
+      case Suit.noTrump:
+        return Colors.indigo.shade700;
+    }
+  }
+
+  /// Валидира формата и връща Game, ако всичко е наред.
   Game? _createGame() {
+    if (_level == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Моля, изберете ниво')),
+      );
+      return null;
+    }
+    if (_suit == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Моля, изберете цвят')),
+      );
+      return null;
+    }
     if (!_formKey.currentState!.validate()) return null;
 
     final boardNumber = int.parse(_boardNumberController.text);
@@ -113,7 +136,9 @@ class _GameInputScreenState extends State<GameInputScreen> {
             // Информация за борда
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -130,10 +155,12 @@ class _GameInputScreenState extends State<GameInputScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Icon(Icons.person, size: 20, color: Theme.of(context).colorScheme.primary),
+                        Icon(Icons.person,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary),
                         const SizedBox(width: 8),
                         Text(
-                          'Дилър: ${_currentBoard.dealer.name}',
+                          'Дилър: ${_currentBoard.dealer.bgName}',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -141,10 +168,12 @@ class _GameInputScreenState extends State<GameInputScreen> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.shield, size: 20, color: Theme.of(context).colorScheme.primary),
+                        Icon(Icons.shield,
+                            size: 20,
+                            color: Theme.of(context).colorScheme.primary),
                         const SizedBox(width: 8),
                         Text(
-                          'Зона: ${_currentBoard.zone.name}',
+                          'Зона: ${_currentBoard.zone.bgName}',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -155,56 +184,57 @@ class _GameInputScreenState extends State<GameInputScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Ниво и цвят на един ред
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _level,
-                    hint: const Text('Ниво'),
-                    decoration: const InputDecoration(
-                      labelText: 'Ниво',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: List.generate(7, (i) => i + 1)
-                        .map((l) => DropdownMenuItem(value: l, child: Text('$l')))
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _level = value;
-                      });
-                    },
-                    validator: (value) => value == null ? 'Изберете' : null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<Suit>(
-                    initialValue: _suit,
-                    hint: const Text('Цвят'),
-                    decoration: const InputDecoration(
-                      labelText: 'Цвят',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: Suit.values
-                        .map((s) => DropdownMenuItem(
-                      value: s,
-                      child: Text(s.symbol, style: const TextStyle(fontSize: 20)),
-                    ))
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _suit = value;
-                      });
-                    },
-                    validator: (value) => value == null ? 'Изберете' : null,
-                  ),
-                ),
-              ],
+            // Секция Контракт
+            Text('Контракт', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            // Избор на ниво
+            Wrap(
+              spacing: 8,
+              children: List.generate(7, (i) {
+                final level = i + 1;
+                return ChoiceChip(
+                  label: Text('$level'),
+                  selected: _level == level,
+                  onSelected: (selected) {
+                    setState(() {
+                      _level = selected ? level : null;
+                    });
+                  },
+                );
+              }),
             ),
+            const SizedBox(height: 12),
+            // Избор на цвят
+            Wrap(
+              spacing: 8,
+              children: Suit.values.map((suit) {
+                final isSelected = _suit == suit;
+                return ChoiceChip(
+                  label: Text(
+                    suit.symbol,
+                    style: TextStyle(
+                      color: _suitColor(suit),
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    setState(() {
+                      _suit = selected ? suit : null;
+                    });
+                  },
+                  backgroundColor: Colors.transparent,
+                  selectedColor: _suitColor(suit).withValues(alpha: 0.2),
+                  side: BorderSide(
+                    color: isSelected ? _suitColor(suit) : Colors.grey.shade400,
+                  ),
+                );
+              }).toList(),
+            ),
+
             const SizedBox(height: 16),
 
-            // Контра/Реконтра и декларант
+            // Контра/Реконтра
             Text('Опции', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             Row(
@@ -234,7 +264,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Декларант – SegmentedButton
+            // Декларант
             Text('Декларант', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             SegmentedButton<Direction>(
@@ -281,7 +311,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
                 controller: _hcpController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'Оньорни точки (HCP)',
+                  labelText: 'HCP в NS',
                   hintText: 'напр. 24',
                   border: OutlineInputBorder(),
                 ),
