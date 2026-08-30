@@ -61,7 +61,8 @@ class _LoadMatchScreenState extends State<LoadMatchScreen> {
           existingSingleMatch: singleMatch,
           existingTable1: table1,
           existingTable2: table2,
-          savedMatchId: info.id, // <-- предаваме id за авто-запис
+          savedMatchId: info.id,
+          savedMatchName: info.name,
         ),
       ),
     );

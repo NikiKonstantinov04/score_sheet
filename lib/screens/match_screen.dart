@@ -11,7 +11,8 @@ class MatchScreen extends StatefulWidget {
   final Match? existingSingleMatch;
   final Match? existingTable1;
   final Match? existingTable2;
-  final String? savedMatchId; // ID на запазения мач, ако е зареден
+  final String? savedMatchId;    // ID на запазения мач, ако е зареден
+  final String? savedMatchName;  // Име на запазения мач
 
   const MatchScreen({
     super.key,
@@ -20,6 +21,7 @@ class MatchScreen extends StatefulWidget {
     this.existingTable1,
     this.existingTable2,
     this.savedMatchId,
+    this.savedMatchName,
   });
 
   @override
@@ -32,11 +34,13 @@ class _MatchScreenState extends State<MatchScreen> {
   Match? _table2Match;
   int _selectedTable = 1;
   String? _savedMatchId;
+  String? _savedMatchName;
 
   @override
   void initState() {
     super.initState();
     _savedMatchId = widget.savedMatchId;
+    _savedMatchName = widget.savedMatchName;
     if (widget.mode == MatchMode.singleTable) {
       _singleMatch = widget.existingSingleMatch ?? Match();
     } else {
@@ -79,11 +83,84 @@ class _MatchScreenState extends State<MatchScreen> {
     }
   }
 
+  /// Записва текущия мач в същия файл, ако има ID.
+  Future<void> _autoSave() async {
+    if (_savedMatchId == null || _savedMatchName == null) return;
+
+    final currentMatch = _getCurrentMatch();
+    if (currentMatch == null) return;
+
+    await StorageService.saveMatch(
+      id: _savedMatchId,
+      mode: widget.mode,
+      singleMatch: widget.mode == MatchMode.singleTable ? currentMatch : null,
+      table1: widget.mode == MatchMode.teamMatch ? _table1Match : null,
+      table2: widget.mode == MatchMode.teamMatch ? _table2Match : null,
+      name: _savedMatchName!,
+    );
+  }
+
+  /// Пита за име, ако мачът още не е запазван, и го записва.
+  Future<void> _ensureSaved() async {
+    if (_savedMatchId != null) return;
+
+    final now = DateTime.now();
+    final defaultName =
+        'Мач ${now.day}.${now.month}.${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final controller = TextEditingController(text: defaultName);
+
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Име на мача'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Име',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отказ'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Запази'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return; // защита след await
+
+    if (name == null || name.isEmpty) return;
+
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    _savedMatchId = id;
+    _savedMatchName = name;
+
+    await _autoSave();
+
+    if (!mounted) return; // защита след await
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Мачът "$name" е запазен')),
+    );
+  }
+
   Future<void> _addGame() async {
     final currentMatch = _getCurrentMatch();
     if (currentMatch == null) return;
 
-    final usedBoardNumbers = currentMatch.games.map((g) => g.board.number).toList();
+    await _ensureSaved();
+    if (!mounted) return; // <-- добавена проверка
+    if (_savedMatchId == null) return; // потребителят е отказал
+
+    final usedBoardNumbers =
+    currentMatch.games.map((g) => g.board.number).toList();
 
     final newGame = await Navigator.of(context).push<Game>(
       MaterialPageRoute(
@@ -94,12 +171,14 @@ class _MatchScreenState extends State<MatchScreen> {
       ),
     );
 
+    if (!mounted) return; // защита след await
+
     if (newGame == null) return;
 
     try {
       currentMatch.addGame(newGame);
       setState(() {});
-      await _autoSaveIfNeeded();
+      await _autoSave();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,7 +193,7 @@ class _MatchScreenState extends State<MatchScreen> {
     if (currentMatch == null) return;
     currentMatch.removeGameByBoardNumber(boardNumber);
     setState(() {});
-    _autoSaveIfNeeded();
+    _autoSave(); // не използва context
   }
 
   Future<void> _clearAllGames() async {
@@ -125,14 +204,16 @@ class _MatchScreenState extends State<MatchScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Изтриване на всички игри'),
-        content: const Text('Сигурни ли сте, че искате да изтриете всички въведени игри за тази маса?'),
+        content: const Text(
+            'Сигурни ли сте, че искате да изтриете всички въведени игри за тази маса?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отказ'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Изтрий'),
           ),
@@ -140,10 +221,12 @@ class _MatchScreenState extends State<MatchScreen> {
       ),
     );
 
+    if (!mounted) return; // защита след await
+
     if (confirmed == true) {
       currentMatch.clear();
       setState(() {});
-      await _autoSaveIfNeeded();
+      await _autoSave();
     }
   }
 
@@ -160,112 +243,12 @@ class _MatchScreenState extends State<MatchScreen> {
     );
   }
 
-  Future<void> _saveCurrentMatch() async {
-    final currentMatch = _getCurrentMatch();
-    if (currentMatch == null || currentMatch.games.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Няма игри за запис')),
-      );
-      return;
-    }
-
-    final now = DateTime.now();
-    final defaultName = 'Мач ${now.day}.${now.month}.${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-    final nameController = TextEditingController(text: defaultName);
-
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Запази мача'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Име на мача',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отказ'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, nameController.text.trim()),
-            child: const Text('Запази'),
-          ),
-        ],
-      ),
-    );
-
-    if (name == null || name.isEmpty) return;
-
-    if (widget.mode == MatchMode.singleTable) {
-      final id = await StorageService.saveMatchWithName(
-        mode: MatchMode.singleTable,
-        singleMatch: currentMatch,
-        table1: null,
-        table2: null,
-        name: name,
-      );
-      if (id != null) {
-        _savedMatchId = id; // запомняме ID за авто-запис
-      }
-    } else {
-      if (_table1Match != null && _table2Match != null) {
-        final id = await StorageService.saveMatchWithName(
-          mode: MatchMode.teamMatch,
-          singleMatch: null,
-          table1: _table1Match,
-          table2: _table2Match,
-          name: name,
-        );
-        if (id != null) {
-          _savedMatchId = id;
-        }
-      }
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Мачът "$name" е запазен успешно')),
-      );
-    }
-  }
-
-  /// Автоматично записва промените, ако мачът вече е бил запазен.
-  Future<void> _autoSaveIfNeeded() async {
-    if (_savedMatchId == null) return; // не е запазен преди – нищо не правим
-
-    final currentMatch = _getCurrentMatch();
-    if (currentMatch == null) return;
-
-    if (widget.mode == MatchMode.singleTable) {
-      await StorageService.saveMatchWithName(
-        mode: MatchMode.singleTable,
-        singleMatch: currentMatch,
-        table1: null,
-        table2: null,
-        name: _savedMatchId!, // използваме ID като име? По-добре да имаме отделна функция за update
-      );
-    } else {
-      if (_table1Match != null && _table2Match != null) {
-        await StorageService.saveMatchWithName(
-          mode: MatchMode.teamMatch,
-          singleMatch: null,
-          table1: _table1Match,
-          table2: _table2Match,
-          name: _savedMatchId!,
-        );
-      }
-    }
-  }
-
   Future<void> _editGame(Game game) async {
     final currentMatch = _getCurrentMatch();
     if (currentMatch == null) return;
 
-    final usedBoardNumbers = currentMatch.games.map((g) => g.board.number).toList();
+    final usedBoardNumbers =
+    currentMatch.games.map((g) => g.board.number).toList();
     usedBoardNumbers.remove(game.board.number);
 
     final editedGame = await Navigator.of(context).push<Game>(
@@ -278,12 +261,14 @@ class _MatchScreenState extends State<MatchScreen> {
       ),
     );
 
+    if (!mounted) return; // защита след await
+
     if (editedGame == null) return;
 
     try {
       currentMatch.replaceGame(game.board.number, editedGame);
       setState(() {});
-      await _autoSaveIfNeeded();
+      await _autoSave();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -326,11 +311,6 @@ class _MatchScreenState extends State<MatchScreen> {
         title: Text(widget.mode == MatchMode.singleTable ? 'Каре' : 'Отборен мач'),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.save_outlined),
-            onPressed: _saveCurrentMatch,
-            tooltip: 'Запази мач',
-          ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'clear') _clearAllGames();

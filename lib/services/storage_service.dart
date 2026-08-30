@@ -34,10 +34,12 @@ class SavedMatchInfo {
 
 /// Сервиз за запазване и зареждане на мачове.
 class StorageService {
-  static const String _savedMatchesKey = 'saved_matches';
+  static const String _matchPrefix = 'match_';
 
-  /// Запазва нов мач под дадено име. Връща id-то на записа.
-  static Future<String> saveMatchWithName({
+  /// Създава нов мач или обновява съществуващ по id.
+  /// Връща id-то на записа.
+  static Future<String> saveMatch({
+    required String? id,
     required MatchMode mode,
     required Match? singleMatch,
     required Match? table1,
@@ -45,8 +47,7 @@ class StorageService {
     required String name,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final effectiveId = id ?? DateTime.now().millisecondsSinceEpoch.toString();
     final savedAt = DateTime.now();
 
     final matchData = <String, dynamic>{
@@ -57,91 +58,45 @@ class StorageService {
     };
 
     final entry = {
-      'id': id,
+      'id': effectiveId,
       'name': name,
       'mode': mode.name,
       'savedAt': savedAt.toIso8601String(),
       'matchData': matchData,
     };
 
-    final jsonString = prefs.getString(_savedMatchesKey);
-    final List<dynamic> list = jsonString == null
-        ? []
-        : (jsonDecode(jsonString) as List<dynamic>);
-    list.add(entry);
-    await prefs.setString(_savedMatchesKey, jsonEncode(list));
-
-    return id;
+    await prefs.setString('$_matchPrefix$effectiveId', jsonEncode(entry));
+    return effectiveId;
   }
 
-  /// Обновява съществуващ запис по id, без да променя името му.
-  /// Връща true, ако обновяването е успешно; false, ако id не съществува.
-  static Future<bool> updateMatch({
-    required String id,
-    required MatchMode mode,
-    Match? singleMatch,
-    Match? table1,
-    Match? table2,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_savedMatchesKey);
-    if (jsonString == null) return false;
-
-    final List<dynamic> list = jsonDecode(jsonString) as List<dynamic>;
-    final index = list.indexWhere((e) => e['id'] == id);
-    if (index == -1) return false;
-
-    final oldEntry = list[index] as Map<String, dynamic>;
-
-    // Запазваме оригиналните id, име и дата на създаване? Датата на последно обновяване ще е сега.
-    final newEntry = {
-      'id': id,
-      'name': oldEntry['name'] as String,
-      'mode': mode.name,
-      'savedAt': DateTime.now().toIso8601String(), // актуализираме датата на промяна
-      'matchData': <String, dynamic>{
-        'mode': mode.name,
-        if (singleMatch != null) 'singleMatch': singleMatch.toJson(),
-        if (table1 != null) 'table1': table1.toJson(),
-        if (table2 != null) 'table2': table2.toJson(),
-      },
-    };
-
-    list[index] = newEntry;
-    await prefs.setString(_savedMatchesKey, jsonEncode(list));
-    return true;
-  }
-
-  /// Връща списък с метаданни за всички запазени мачове.
+  /// Зарежда списък с всички запазени мачове.
   static Future<List<SavedMatchInfo>> getAllSavedMatches() async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_savedMatchesKey);
-    if (jsonString == null) return [];
-    final list = jsonDecode(jsonString) as List<dynamic>;
-    return list.map((e) => SavedMatchInfo.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  /// Зарежда конкретен мач по id. Връща данните за мача.
-  static Future<Map<String, dynamic>?> loadMatchData(String id) async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_savedMatchesKey);
-    if (jsonString == null) return null;
-    final list = jsonDecode(jsonString) as List<dynamic>;
-    for (final item in list) {
-      if (item['id'] == id) {
-        return item['matchData'] as Map<String, dynamic>;
+    final keys = prefs.getKeys().where((k) => k.startsWith(_matchPrefix));
+    final list = <SavedMatchInfo>[];
+    for (final key in keys) {
+      final jsonString = prefs.getString(key);
+      if (jsonString != null) {
+        final map = jsonDecode(jsonString) as Map<String, dynamic>;
+        list.add(SavedMatchInfo.fromJson(map));
       }
     }
-    return null;
+    return list;
+  }
+
+  /// Зарежда данните на конкретен мач по id.
+  static Future<Map<String, dynamic>?> loadMatchData(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = '$_matchPrefix$id';
+    final jsonString = prefs.getString(key);
+    if (jsonString == null) return null;
+    final map = jsonDecode(jsonString) as Map<String, dynamic>;
+    return map['matchData'] as Map<String, dynamic>;
   }
 
   /// Изтрива мач по id.
   static Future<void> deleteMatch(String id) async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_savedMatchesKey);
-    if (jsonString == null) return;
-    final list = jsonDecode(jsonString) as List<dynamic>;
-    list.removeWhere((item) => item['id'] == id);
-    await prefs.setString(_savedMatchesKey, jsonEncode(list));
+    await prefs.remove('$_matchPrefix$id');
   }
 }
