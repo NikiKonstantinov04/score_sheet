@@ -11,6 +11,7 @@ class MatchScreen extends StatefulWidget {
   final Match? existingSingleMatch;
   final Match? existingTable1;
   final Match? existingTable2;
+  final String? savedMatchId; // ID на запазения мач, ако е зареден
 
   const MatchScreen({
     super.key,
@@ -18,6 +19,7 @@ class MatchScreen extends StatefulWidget {
     this.existingSingleMatch,
     this.existingTable1,
     this.existingTable2,
+    this.savedMatchId,
   });
 
   @override
@@ -29,10 +31,12 @@ class _MatchScreenState extends State<MatchScreen> {
   Match? _table1Match;
   Match? _table2Match;
   int _selectedTable = 1;
+  String? _savedMatchId;
 
   @override
   void initState() {
     super.initState();
+    _savedMatchId = widget.savedMatchId;
     if (widget.mode == MatchMode.singleTable) {
       _singleMatch = widget.existingSingleMatch ?? Match();
     } else {
@@ -95,6 +99,7 @@ class _MatchScreenState extends State<MatchScreen> {
     try {
       currentMatch.addGame(newGame);
       setState(() {});
+      await _autoSaveIfNeeded();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -109,6 +114,7 @@ class _MatchScreenState extends State<MatchScreen> {
     if (currentMatch == null) return;
     currentMatch.removeGameByBoardNumber(boardNumber);
     setState(() {});
+    _autoSaveIfNeeded();
   }
 
   Future<void> _clearAllGames() async {
@@ -137,6 +143,7 @@ class _MatchScreenState extends State<MatchScreen> {
     if (confirmed == true) {
       currentMatch.clear();
       setState(() {});
+      await _autoSaveIfNeeded();
     }
   }
 
@@ -194,12 +201,52 @@ class _MatchScreenState extends State<MatchScreen> {
     if (name == null || name.isEmpty) return;
 
     if (widget.mode == MatchMode.singleTable) {
-      await StorageService.saveMatchWithName(
+      final id = await StorageService.saveMatchWithName(
         mode: MatchMode.singleTable,
         singleMatch: currentMatch,
         table1: null,
         table2: null,
         name: name,
+      );
+      if (id != null) {
+        _savedMatchId = id; // запомняме ID за авто-запис
+      }
+    } else {
+      if (_table1Match != null && _table2Match != null) {
+        final id = await StorageService.saveMatchWithName(
+          mode: MatchMode.teamMatch,
+          singleMatch: null,
+          table1: _table1Match,
+          table2: _table2Match,
+          name: name,
+        );
+        if (id != null) {
+          _savedMatchId = id;
+        }
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Мачът "$name" е запазен успешно')),
+      );
+    }
+  }
+
+  /// Автоматично записва промените, ако мачът вече е бил запазен.
+  Future<void> _autoSaveIfNeeded() async {
+    if (_savedMatchId == null) return; // не е запазен преди – нищо не правим
+
+    final currentMatch = _getCurrentMatch();
+    if (currentMatch == null) return;
+
+    if (widget.mode == MatchMode.singleTable) {
+      await StorageService.saveMatchWithName(
+        mode: MatchMode.singleTable,
+        singleMatch: currentMatch,
+        table1: null,
+        table2: null,
+        name: _savedMatchId!, // използваме ID като име? По-добре да имаме отделна функция за update
       );
     } else {
       if (_table1Match != null && _table2Match != null) {
@@ -208,15 +255,9 @@ class _MatchScreenState extends State<MatchScreen> {
           singleMatch: null,
           table1: _table1Match,
           table2: _table2Match,
-          name: name,
+          name: _savedMatchId!,
         );
       }
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Мачът "$name" е запазен успешно')),
-      );
     }
   }
 
@@ -242,6 +283,7 @@ class _MatchScreenState extends State<MatchScreen> {
     try {
       currentMatch.replaceGame(game.board.number, editedGame);
       setState(() {});
+      await _autoSaveIfNeeded();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -486,6 +528,7 @@ class _MatchScreenState extends State<MatchScreen> {
         ),
       ),
       bottomNavigationBar: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -497,68 +540,62 @@ class _MatchScreenState extends State<MatchScreen> {
             ),
           ],
         ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'ТЕКУЩ РЕЗУЛТАТ',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              letterSpacing: 1.1,
-                              fontWeight: FontWeight.bold,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _getSummary(),
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'ТЕКУЩ РЕЗУЛТАТ',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      onPressed: _showResults,
-                      icon: const Icon(Icons.bar_chart_rounded, size: 20),
-                      label: const Text('Карта'),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        _getSummary(),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: _addGame,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text(
-                    'ДОБАВИ БОРД',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  onPressed: _showResults,
+                  icon: const Icon(Icons.bar_chart_rounded, size: 20),
+                  label: const Text('Карта'),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: _addGame,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text(
+                'ДОБАВИ БОРД',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
         ),
       ),
     );

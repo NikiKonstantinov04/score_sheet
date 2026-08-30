@@ -36,7 +36,7 @@ class SavedMatchInfo {
 class StorageService {
   static const String _savedMatchesKey = 'saved_matches';
 
-  /// Запазва мач под дадено име. Връща id-то на записа.
+  /// Запазва нов мач под дадено име. Връща id-то на записа.
   static Future<String> saveMatchWithName({
     required MatchMode mode,
     required Match? singleMatch,
@@ -49,7 +49,6 @@ class StorageService {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final savedAt = DateTime.now();
 
-    // Изграждаме обект с данни за мача
     final matchData = <String, dynamic>{
       'mode': mode.name,
       if (singleMatch != null) 'singleMatch': singleMatch.toJson(),
@@ -65,7 +64,6 @@ class StorageService {
       'matchData': matchData,
     };
 
-    // Вземаме текущия списък и добавяме новия запис
     final jsonString = prefs.getString(_savedMatchesKey);
     final List<dynamic> list = jsonString == null
         ? []
@@ -74,6 +72,44 @@ class StorageService {
     await prefs.setString(_savedMatchesKey, jsonEncode(list));
 
     return id;
+  }
+
+  /// Обновява съществуващ запис по id, без да променя името му.
+  /// Връща true, ако обновяването е успешно; false, ако id не съществува.
+  static Future<bool> updateMatch({
+    required String id,
+    required MatchMode mode,
+    Match? singleMatch,
+    Match? table1,
+    Match? table2,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_savedMatchesKey);
+    if (jsonString == null) return false;
+
+    final List<dynamic> list = jsonDecode(jsonString) as List<dynamic>;
+    final index = list.indexWhere((e) => e['id'] == id);
+    if (index == -1) return false;
+
+    final oldEntry = list[index] as Map<String, dynamic>;
+
+    // Запазваме оригиналните id, име и дата на създаване? Датата на последно обновяване ще е сега.
+    final newEntry = {
+      'id': id,
+      'name': oldEntry['name'] as String,
+      'mode': mode.name,
+      'savedAt': DateTime.now().toIso8601String(), // актуализираме датата на промяна
+      'matchData': <String, dynamic>{
+        'mode': mode.name,
+        if (singleMatch != null) 'singleMatch': singleMatch.toJson(),
+        if (table1 != null) 'table1': table1.toJson(),
+        if (table2 != null) 'table2': table2.toJson(),
+      },
+    };
+
+    list[index] = newEntry;
+    await prefs.setString(_savedMatchesKey, jsonEncode(list));
+    return true;
   }
 
   /// Връща списък с метаданни за всички запазени мачове.
