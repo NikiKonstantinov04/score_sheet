@@ -101,4 +101,12 @@ class Match {
     if (index == -1) return false;
     _games[index] = newGame;
     return true;
-  }}
+  }
+
+  /// Сортира игрите по номер на борда във възходящ ред.
+  void sortGames() {
+    _games.sort((a, b) => a.board.number.compareTo(b.board.number));
+  }
+}
+
+

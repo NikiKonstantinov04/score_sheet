@@ -4,6 +4,11 @@ import '../scoring/scoring.dart';
 import '../services/storage_service.dart';
 import 'game_input_screen.dart';
 import 'results_screen.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import '../services/qr_service.dart';
+import 'qr_scan_screen.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Екран за провеждане на мач – показва игрите и позволява добавяне.
 class MatchScreen extends StatefulWidget {
@@ -43,9 +48,12 @@ class _MatchScreenState extends State<MatchScreen> {
     _savedMatchName = widget.savedMatchName;
     if (widget.mode == MatchMode.singleTable) {
       _singleMatch = widget.existingSingleMatch ?? Match();
+      _singleMatch!.sortGames();
     } else {
       _table1Match = widget.existingTable1 ?? Match();
+      _table1Match!.sortGames();
       _table2Match = widget.existingTable2 ?? Match();
+      _table2Match!.sortGames();
     }
   }
 
@@ -177,6 +185,7 @@ class _MatchScreenState extends State<MatchScreen> {
 
     try {
       currentMatch.addGame(newGame);
+      currentMatch.sortGames();
       setState(() {});
       await _autoSave();
     } catch (e) {
@@ -267,6 +276,7 @@ class _MatchScreenState extends State<MatchScreen> {
 
     try {
       currentMatch.replaceGame(game.board.number, editedGame);
+      currentMatch.sortGames();
       setState(() {});
       await _autoSave();
     } catch (e) {
@@ -275,6 +285,215 @@ class _MatchScreenState extends State<MatchScreen> {
           SnackBar(content: Text(e.toString())),
         );
       }
+    }
+  }
+
+  /// Показва опции за QR обмен.
+  Future<void> _showQrOptions() async {
+    if (widget.mode != MatchMode.teamMatch) return;
+
+    // Проверка за поддръжка на QR скенер
+    final bool canScan = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('QR обмен'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'send'),
+            child: const Row(
+              children: [
+                Icon(Icons.qr_code_2),
+                SizedBox(width: 12),
+                Text('Изпрати данни'),
+              ],
+            ),
+          ),
+          if (canScan)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'scan'),
+              child: const Row(
+                children: [
+                  Icon(Icons.qr_code_scanner),
+                  SizedBox(width: 12),
+                  Text('Сканирай данни'),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (action == 'send') {
+      await _sendQrData();
+    } else if (action == 'scan') {
+      await _scanQrData();
+    }
+  }
+
+  /// Генерира QR код с данните на избраната маса.
+  Future<void> _sendQrData() async {
+    // Избор на маса
+    final table = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Изберете маса за изпращане'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Маса 1'),
+              onTap: () => Navigator.pop(context, 1),
+            ),
+            ListTile(
+              title: const Text('Маса 2'),
+              onTap: () => Navigator.pop(context, 2),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (table == null) return;
+
+    final match = table == 1 ? _table1Match : _table2Match;
+    if (match == null || match.games.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Няма данни за маса $table')),
+        );
+      }
+      return;
+    }
+
+    final payload = QrPayload(tableNumber: table, match: match);
+    final qrData = payload.toJsonString();
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('QR код за маса $table'),
+        content: Container(
+          color: Colors.white, // бял фон
+          padding: const EdgeInsets.all(8),
+          child: SizedBox(
+            width: 250,
+            height: 250,
+            child: QrImageView(
+              data: qrData,
+              version: QrVersions.auto,
+              backgroundColor: Colors.white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Colors.black,
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Затвори'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Сканира QR код и импортира данни в избраната маса.
+  Future<void> _scanQrData() async {
+    final scannedData = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => const QrScanScreen(),
+      ),
+    );
+
+    if (scannedData == null || !mounted) return;
+
+    final payload = QrPayload.fromJsonString(scannedData);
+    if (payload == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Невалиден QR код')),
+        );
+      }
+      return;
+    }
+
+    // Питаме в коя маса да се импортира
+    final targetTable = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('В коя маса да се импортират данните?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Маса 1'),
+              onTap: () => Navigator.pop(context, 1),
+            ),
+            ListTile(
+              title: const Text('Маса 2'),
+              onTap: () => Navigator.pop(context, 2),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (targetTable == null || !mounted) return;
+
+    // Ако съответната маса вече има игри, предупреждаваме
+    final targetMatch = targetTable == 1 ? _table1Match : _table2Match;
+    if (targetMatch != null && targetMatch.games.isNotEmpty) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Масата вече съдържа игри'),
+          content: const Text('Искате ли да презапишете съществуващите данни?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отказ'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Презапиши'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm != true) return;
+    }
+
+    setState(() {
+      if (targetTable == 1) {
+        _table1Match = payload.match;
+      } else {
+        _table2Match = payload.match;
+      }
+      // Сортираме за всеки случай
+      if (targetTable == 1) {
+        _table1Match?.sortGames();
+      } else {
+        _table2Match?.sortGames();
+      }
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Данните от маса ${payload.tableNumber} са импортирани в маса $targetTable')),
+      );
     }
   }
 
@@ -328,6 +547,12 @@ class _MatchScreenState extends State<MatchScreen> {
               ),
             ],
           ),
+          if (widget.mode == MatchMode.teamMatch)
+            IconButton(
+              icon: const Icon(Icons.qr_code_2),
+              onPressed: _showQrOptions,
+              tooltip: 'Обмен чрез QR код',
+            ),
         ],
       ),
       body: SafeArea(

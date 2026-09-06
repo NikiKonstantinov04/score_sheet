@@ -44,10 +44,12 @@ class _GameInputScreenState extends State<GameInputScreen> {
       _tricks = game.tricksWon;
       _hcp = widget.showHcpField ? (game.hcp ?? 20) : 0;
     } else {
+      // Автоматично намиране на НАЙ-МАЛКИЯ свободен номер (започвайки от 1)
       int nextBoardNumber = 1;
       while (widget.usedBoardNumbers.contains(nextBoardNumber)) {
         nextBoardNumber++;
       }
+
       _currentBoard = Board.auto(nextBoardNumber);
       _tricks = 6 + _level;
       _hcp = widget.showHcpField ? 20 : 0;
@@ -64,7 +66,6 @@ class _GameInputScreenState extends State<GameInputScreen> {
       case Suit.heart:
         return Colors.red.shade700;
       case Suit.spade:
-        return brightness == Brightness.dark ? Colors.white : Colors.black;
       case Suit.noTrump:
         return brightness == Brightness.dark ? Colors.white : Colors.black;
     }
@@ -114,14 +115,13 @@ class _GameInputScreenState extends State<GameInputScreen> {
     return '$diff';
   }
 
-  /// Динамичен цвят за резултата от взятките
   Color? _differenceColor() {
     if (_suit == null) return null;
     final required = 6 + _level;
     final diff = _tricks - required;
     if (diff < 0) return Colors.red.shade700;
     if (diff > 0) return Colors.green.shade700;
-    return null; // Връща цвета по подразбиране за "="
+    return null;
   }
 
   Game? _createGame() {
@@ -149,12 +149,130 @@ class _GameInputScreenState extends State<GameInputScreen> {
     );
   }
 
+  /// Модален прозорец за бърз и неограничен избор на борд
+  void _showBoardPickerModal(BuildContext context) {
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Изберете борд',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: GridView.builder(
+                      controller: scrollController,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 1.2,
+                      ),
+                      itemBuilder: (context, index) {
+                        final boardNum = index + 1;
+                        final isUsed = widget.usedBoardNumbers.contains(boardNum) &&
+                            boardNum != widget.existingGame?.board.number;
+                        final isSelected = boardNum == _currentBoard.number;
+
+                        return InkWell(
+                          onTap: isUsed
+                              ? null
+                              : () {
+                            setState(() {
+                              _currentBoard = Board.auto(boardNum);
+                            });
+                            Navigator.pop(context);
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : isUsed
+                                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
+                                  : theme.colorScheme.surfaceContainerHigh,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.outlineVariant,
+                              ),
+                            ),
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '$boardNum',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: isSelected
+                                        ? theme.colorScheme.onPrimary
+                                        : isUsed
+                                        ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
+                                        : theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                                if (isUsed)
+                                  Text(
+                                    'игран',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.38),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Нова игра'), centerTitle: true),
+      appBar: AppBar(
+        title: Text(widget.existingGame != null ? 'Редакция на игра' : 'Нова игра'),
+        centerTitle: true,
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -226,21 +344,31 @@ class _GameInputScreenState extends State<GameInputScreen> {
             children: [
               _buildSideBox('WEST', isHorizontal: false),
               Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      '${_currentBoard.number}',
-                      style: theme.textTheme.displaySmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: theme.colorScheme.primary,
-                      ),
+                child: InkWell(
+                  onTap: () => _showBoardPickerModal(context),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${_currentBoard.number}',
+                          style: theme.textTheme.displaySmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 18,
+                          color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _currentBoard.zone.bgName,
-                      style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 1.2),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               _buildSideBox('EAST', isHorizontal: false),
@@ -261,14 +389,29 @@ class _GameInputScreenState extends State<GameInputScreen> {
     if (side.startsWith('W')) return dealer == Direction.west;
     return false;
   }
-/// визуализация кой е dealer в дона
+
   Widget _buildSideBox(String side, {required bool isHorizontal}) {
     final isDealer = _isDealerSide(side);
-    final bgColor = _sideColor(side.substring(0, 1));
+    final sideLetter = side.substring(0, 1);
+    final isVulnerable = _isSideVulnerable(sideLetter);
     final theme = Theme.of(context);
-
-    // Определяме какъв текст да се покаже
     final displayText = isDealer ? 'DEALER' : side;
+
+    // Конфигурация на цветовете и рамката
+    final Color bgColor;
+    final Border border;
+    final Color textColor;
+
+    if (isDealer) {
+      bgColor = Colors.white;
+      final vulColor = isVulnerable ? Colors.red : Colors.green;
+      border = Border.all(color: vulColor, width: 2.5);
+      textColor = Colors.black; // Черно за висока четливост върху бял фон
+    } else {
+      bgColor = _sideColor(sideLetter);
+      border = Border.all(color: theme.dividerColor);
+      textColor = theme.colorScheme.onSurface;
+    }
 
     return Container(
       width: isHorizontal ? 100 : 36,
@@ -277,17 +420,17 @@ class _GameInputScreenState extends State<GameInputScreen> {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: theme.dividerColor),
+        border: border,
       ),
       child: RotatedBox(
         quarterTurns: isHorizontal ? 0 : 1,
         child: Text(
           displayText,
           style: TextStyle(
-            fontWeight: FontWeight.bold, // Текстът е удебелен
+            fontWeight: FontWeight.bold,
             fontSize: 12,
-            letterSpacing: 1.2, // Леко разстояние между буквите за по-добър вид
-            color: theme.colorScheme.onSurface,
+            letterSpacing: 1.2,
+            color: textColor,
           ),
         ),
       ),
