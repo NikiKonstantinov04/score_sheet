@@ -32,6 +32,20 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
+  /// Връща буквата на декларанта (N/E/S/W).
+  String _getDeclarerLetter(Direction declarer) {
+    switch (declarer) {
+      case Direction.north:
+        return 'N';
+      case Direction.east:
+        return 'E';
+      case Direction.south:
+        return 'S';
+      case Direction.west:
+        return 'W';
+    }
+  }
+
   Widget _buildSingleTableResults(BuildContext context) {
     final match = singleMatch;
     if (match == null || match.games.isEmpty) {
@@ -94,6 +108,7 @@ class ResultsScreen extends StatelessWidget {
                       columns: const [
                         DataColumn(label: Text('Борд', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Договор', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('От', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('HCP', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                         DataColumn(label: Text('Задълж.', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                         DataColumn(label: Text('Резултат', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
@@ -101,14 +116,19 @@ class ResultsScreen extends StatelessWidget {
                         DataColumn(label: Text('IMP (NS)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
                       rows: match.games.map((game) {
+                        final declarerIsNS = game.declarer == Direction.north ||
+                            game.declarer == Direction.south;
+
                         final commitment = game.hcp != null
-                            ? getCommitment(game.hcp!, game.board.zone)
+                            ? getCommitmentForSide(game.hcp!, game.board.zone, declarerIsNS)
                             : 0;
-                        final nsScore = game.declarer == Direction.north ||
-                            game.declarer == Direction.south
-                            ? game.score
-                            : -game.score;
-                        final netScore = nsScore - commitment;
+
+                        final nsScore = declarerIsNS ? game.score : -game.score;
+
+                        final netScore = declarerIsNS
+                            ? nsScore - commitment
+                            : nsScore + commitment;
+
                         final imp = scoring.getBoardImps(
                           game.board.number,
                           perspectiveNS: true,
@@ -131,6 +151,10 @@ class ResultsScreen extends StatelessWidget {
                               ),
                             ),
                             DataCell(_buildFormattedContract(context, game.contract)),
+                            DataCell(Text(
+                              _getDeclarerLetter(game.declarer),
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            )),
                             DataCell(Text(game.hcp?.toString() ?? '--')),
                             DataCell(Text('$commitment')),
                             DataCell(_buildScoreText(context, nsScore)),
@@ -215,8 +239,10 @@ class ResultsScreen extends StatelessWidget {
                       ),
                       columns: const [
                         DataColumn(label: Text('Борд', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('IMP (Отбор A)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('IMP (Отбор B)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('От A', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('От B', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('IMP (A)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(label: Text('IMP (B)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                       ],
                       rows: sortedBoardNumbers.map((boardNumber) {
                         int impA = 0;
@@ -227,6 +253,12 @@ class ResultsScreen extends StatelessWidget {
                           impB = -impA;
                           isComplete = true;
                         } catch (_) {}
+
+                        // Вземаме декларанта от всяка маса
+                        final game1 = table1!.getGameByBoardNumber(boardNumber);
+                        final game2 = table2!.getGameByBoardNumber(boardNumber);
+                        final declarer1 = game1 != null ? _getDeclarerLetter(game1.declarer) : '--';
+                        final declarer2 = game2 != null ? _getDeclarerLetter(game2.declarer) : '--';
 
                         return DataRow(
                           cells: [
@@ -244,6 +276,14 @@ class ResultsScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            DataCell(Text(
+                              declarer1,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            )),
+                            DataCell(Text(
+                              declarer2,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            )),
                             DataCell(
                               isComplete ? _buildImpBadge(context, impA) : const Text('--'),
                             ),
@@ -334,7 +374,6 @@ class ResultsScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final formattedValue = value > 0 ? '+$value' : '$value';
 
-    // Адаптивен цвят за положителни/отрицателни стойности
     final bool isDark = theme.brightness == Brightness.dark;
     final Color positiveColor = isDark ? Colors.green.shade400 : Colors.green.shade700;
     final Color negativeColor = isDark ? Colors.red.shade400 : Colors.red.shade700;

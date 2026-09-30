@@ -633,7 +633,11 @@ class _MatchScreenState extends State<MatchScreen> {
                   itemCount: currentMatch.games.length,
                   itemBuilder: (context, index) {
                     final game = currentMatch.games[index];
-                    final isPositive = game.score >= 0;
+                    final declarerIsNS = game.declarer == Direction.north ||
+                        game.declarer == Direction.south;
+// Показваме резултата от гледна точка на NS (това е стандартът в бриджа)
+                    final displayScore = declarerIsNS ? game.score : -game.score;
+                    final isPositive = displayScore >= 0;
                     final suitColor = _getSuitColor(context, game.contract.suit);
 
                     return Dismissible(
@@ -715,7 +719,7 @@ class _MatchScreenState extends State<MatchScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              '${isPositive ? "+${game.score}" : game.score}',
+                              '${isPositive ? "+$displayScore" : displayScore}',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 15,

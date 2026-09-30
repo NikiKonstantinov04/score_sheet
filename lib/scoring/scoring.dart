@@ -174,16 +174,22 @@ class MatchScoring {
       throw StateError('Липсва игра за борд $boardNumber.');
     }
 
-    // Резултат за NS
-    int nsScore = game.declarer == Direction.north ||
-        game.declarer == Direction.south
-        ? game.score
-        : -game.score;
+    final declarerIsNS = game.declarer == Direction.north ||
+        game.declarer == Direction.south;
+
+    // Резултат от гледна точка на NS
+    int nsScore = declarerIsNS ? game.score : -game.score;
 
     // Прилагаме задължение само ако има HCP
     if (game.hcp != null) {
-      final commitment = getCommitment(game.hcp!, game.board.zone);
-      nsScore -= commitment;
+      final commitment = getCommitmentForSide(game.hcp!, game.board.zone, declarerIsNS);
+      if (declarerIsNS) {
+        // NS е декларант → задължението е на NS → вадим го от NS резултата
+        nsScore -= commitment;
+      } else {
+        // EW е декларант → задължението е на EW → добавяме го към NS резултата (защото е в полза на EW)
+        nsScore += commitment;
+      }
     }
 
     return scoreToImps(perspectiveNS ? nsScore : -nsScore);
@@ -193,14 +199,17 @@ class MatchScoring {
   int _getSingleTableTotalImps({required bool perspectiveNS}) {
     int totalImps = 0;
     for (final game in singleMatch!.games) {
-      int nsScore = game.declarer == Direction.north ||
-          game.declarer == Direction.south
-          ? game.score
-          : -game.score;
+      final declarerIsNS = game.declarer == Direction.north ||
+          game.declarer == Direction.south;
+      int nsScore = declarerIsNS ? game.score : -game.score;
 
       if (game.hcp != null) {
-        final commitment = getCommitment(game.hcp!, game.board.zone);
-        nsScore -= commitment;
+        final commitment = getCommitmentForSide(game.hcp!, game.board.zone, declarerIsNS);
+        if (declarerIsNS) {
+          nsScore -= commitment;
+        } else {
+          nsScore += commitment;
+        }
       }
 
       totalImps += scoreToImps(perspectiveNS ? nsScore : -nsScore);

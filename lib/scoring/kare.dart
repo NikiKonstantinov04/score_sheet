@@ -1,11 +1,9 @@
 import '../models/enums.dart';
 
-/// Връща задължението в точки според HCP и зоната на борда.
-int getCommitment(int hcp, Zones zone) {
-  final bool isVulnerable = (zone == Zones.ns || zone == Zones.all);
-
+/// Връща задължението в точки според HCP и уязвимост.
+int getCommitment(int hcp, bool isVulnerable) {
   if (!isVulnerable) {
-    // Без зона
+    // Неуязвими
     if (hcp <= 3) return -1300;
     if (hcp <= 4) return -1200;
     if (hcp <= 5) return -1100;
@@ -24,7 +22,6 @@ int getCommitment(int hcp, Zones zone) {
     if (hcp <= 18) return -70;
     if (hcp <= 19) return -50;
     if (hcp <= 20) return 0;
-    // положителни (съществуващи)
     if (hcp <= 21) return 50;
     if (hcp <= 22) return 70;
     if (hcp <= 23) return 110;
@@ -43,7 +40,7 @@ int getCommitment(int hcp, Zones zone) {
     if (hcp <= 36) return 1200;
     return 1300;
   } else {
-    // Уязвими зони
+    // Уязвими
     if (hcp <= 3) return -2000;
     if (hcp <= 4) return -1800;
     if (hcp <= 5) return -1650;
@@ -62,7 +59,6 @@ int getCommitment(int hcp, Zones zone) {
     if (hcp <= 18) return -70;
     if (hcp <= 19) return -50;
     if (hcp <= 20) return 0;
-    // положителни (съществуващи)
     if (hcp <= 21) return 50;
     if (hcp <= 22) return 70;
     if (hcp <= 23) return 110;
@@ -81,4 +77,24 @@ int getCommitment(int hcp, Zones zone) {
     if (hcp <= 36) return 1800;
     return 1950;
   }
+}
+
+/// Връща задължението за конкретна страна (NS или EW).
+///
+/// [nsHcp] – HCP на NS (винаги се въвежда за NS в приложението).
+/// [zone] – зоната на борда.
+/// [forNS] – true за NS, false за EW.
+int getCommitmentForSide(int nsHcp, Zones zone, bool forNS) {
+  final int hcp;
+  final bool isVulnerable;
+
+  if (forNS) {
+    hcp = nsHcp;
+    isVulnerable = (zone == Zones.ns || zone == Zones.all);
+  } else {
+    hcp = 40 - nsHcp;
+    isVulnerable = (zone == Zones.ew || zone == Zones.all);
+  }
+
+  return getCommitment(hcp, isVulnerable);
 }
