@@ -44,12 +44,10 @@ class _GameInputScreenState extends State<GameInputScreen> {
       _tricks = game.tricksWon;
       _hcp = widget.showHcpField ? (game.hcp ?? 20) : 0;
     } else {
-      // Автоматично намиране на НАЙ-МАЛКИЯ свободен номер (започвайки от 1)
       int nextBoardNumber = 1;
       while (widget.usedBoardNumbers.contains(nextBoardNumber)) {
         nextBoardNumber++;
       }
-
       _currentBoard = Board.auto(nextBoardNumber);
       _tricks = 6 + _level;
       _hcp = widget.showHcpField ? 20 : 0;
@@ -267,51 +265,30 @@ class _GameInputScreenState extends State<GameInputScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.existingGame != null ? 'Редакция на игра' : 'Нова игра'),
         centerTitle: true,
+        toolbarHeight: isLandscape ? 44 : kToolbarHeight,
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          children: [
-            _buildBoardHeader(theme),
-            const SizedBox(height: 12),
-            _buildContractCard(theme),
-            const SizedBox(height: 12),
-            _buildDeclarerCard(theme),
-            const SizedBox(height: 12),
-            _buildResultCard(theme),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
-              ),
-              child: Text(
-                _previewText,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onPrimaryContainer,
-                ),
-              ),
-            ),
-          ],
-        ),
+        child: isLandscape
+            ? _buildLandscapeLayout(theme)
+            : _buildPortraitLayout(theme),
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(isLandscape ? 8 : 16),
           child: FilledButton(
             style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(56),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              minimumSize: Size.fromHeight(isLandscape ? 44 : 56),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              textStyle:
+              const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             onPressed: () {
               final game = _createGame();
@@ -319,6 +296,85 @@ class _GameInputScreenState extends State<GameInputScreen> {
             },
             child: const Text('ЗАПАЗИ РЕЗУЛТАТА'),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Portrait layout – вертикален списък със секции.
+  Widget _buildPortraitLayout(ThemeData theme) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      children: [
+        _buildBoardHeader(theme),
+        const SizedBox(height: 12),
+        _buildContractCard(theme),
+        const SizedBox(height: 12),
+        _buildDeclarerCard(theme),
+        const SizedBox(height: 12),
+        _buildResultCard(theme),
+        const SizedBox(height: 16),
+        _buildPreview(theme),
+      ],
+    );
+  }
+
+  /// Landscape layout – 2 реда × 2 колони.
+  /// Ред 1: Борд | Контракт
+  /// Ред 2: Декларант | Резултат
+  /// Отдолу: Preview
+  Widget _buildLandscapeLayout(ThemeData theme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Ред 1: Борд | Контракт
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _buildBoardHeader(theme)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildContractCard(theme)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Ред 2: Декларант | Резултат
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _buildDeclarerCard(theme)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildResultCard(theme)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildPreview(theme),
+        ],
+      ),
+    );
+  }
+
+  /// Live preview контейнер.
+  Widget _buildPreview(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border:
+        Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        _previewText,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onPrimaryContainer,
         ),
       ),
     );
@@ -364,7 +420,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
                         Icon(
                           Icons.edit_outlined,
                           size: 18,
-                          color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                          color:
+                          theme.colorScheme.primary.withValues(alpha: 0.7),
                         ),
                       ],
                     ),
@@ -397,7 +454,6 @@ class _GameInputScreenState extends State<GameInputScreen> {
     final theme = Theme.of(context);
     final displayText = isDealer ? 'DEALER' : side;
 
-    // Конфигурация на цветовете и рамката
     final Color bgColor;
     final Border border;
     final Color textColor;
@@ -406,7 +462,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
       bgColor = Colors.white;
       final vulColor = isVulnerable ? Colors.red : Colors.green;
       border = Border.all(color: vulColor, width: 2.5);
-      textColor = Colors.black; // Черно за висока четливост върху бял фон
+      textColor = Colors.black;
     } else {
       bgColor = _sideColor(sideLetter);
       border = Border.all(color: theme.dividerColor);
@@ -450,7 +506,9 @@ class _GameInputScreenState extends State<GameInputScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Контракт', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('Контракт',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
@@ -483,7 +541,9 @@ class _GameInputScreenState extends State<GameInputScreen> {
                     style: TextStyle(
                       color: suitColor,
                       fontSize: 22,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                   ),
                   selected: isSelected,
@@ -493,7 +553,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
                       _suit = selected ? suit : null;
                     });
                   },
-                  backgroundColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.5),
                   selectedColor: suitColor.withValues(alpha: 0.15),
                   side: BorderSide(
                     color: isSelected ? suitColor : Colors.transparent,
@@ -502,7 +563,9 @@ class _GameInputScreenState extends State<GameInputScreen> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 FilterChip(
                   label: const Text('Контра'),
@@ -517,7 +580,6 @@ class _GameInputScreenState extends State<GameInputScreen> {
                   checkmarkColor: Colors.red,
                   side: _doubled ? const BorderSide(color: Colors.red) : null,
                 ),
-                const SizedBox(width: 12),
                 FilterChip(
                   label: const Text('Реконтра'),
                   selected: _redoubled,
@@ -529,7 +591,9 @@ class _GameInputScreenState extends State<GameInputScreen> {
                   },
                   selectedColor: Colors.blue.withValues(alpha: 0.15),
                   checkmarkColor: Colors.blue,
-                  side: _redoubled ? const BorderSide(color: Colors.blue) : null,
+                  side: _redoubled
+                      ? const BorderSide(color: Colors.blue)
+                      : null,
                 ),
               ],
             ),
@@ -552,7 +616,9 @@ class _GameInputScreenState extends State<GameInputScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Декларант', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('Декларант',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -590,7 +656,9 @@ class _GameInputScreenState extends State<GameInputScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Резултат', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('Резултат',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -602,12 +670,15 @@ class _GameInputScreenState extends State<GameInputScreen> {
                     if (_suit != null && _tricks != 6 + _level)
                       IconButton(
                         onPressed: () => setState(() => _tricks = 6 + _level),
-                        icon: Icon(Icons.refresh, color: theme.colorScheme.primary, size: 20),
+                        icon: Icon(Icons.refresh,
+                            color: theme.colorScheme.primary, size: 20),
                         tooltip: 'Върни на =',
                       ),
                     IconButton.filledTonal(
                       icon: const Icon(Icons.remove),
-                      onPressed: _tricks > 0 ? () => setState(() => _tricks--) : null,
+                      onPressed: _tricks > 0
+                          ? () => setState(() => _tricks--)
+                          : null,
                     ),
                     SizedBox(
                       width: 52,
@@ -616,13 +687,16 @@ class _GameInputScreenState extends State<GameInputScreen> {
                         textAlign: TextAlign.center,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: _differenceColor() ?? theme.textTheme.headlineSmall?.color,
+                          color: _differenceColor() ??
+                              theme.textTheme.headlineSmall?.color,
                         ),
                       ),
                     ),
                     IconButton.filledTonal(
                       icon: const Icon(Icons.add),
-                      onPressed: _tricks < 13 ? () => setState(() => _tricks++) : null,
+                      onPressed: _tricks < 13
+                          ? () => setState(() => _tricks++)
+                          : null,
                     ),
                   ],
                 ),
@@ -642,7 +716,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
                     children: [
                       IconButton.filledTonal(
                         icon: const Icon(Icons.remove),
-                        onPressed: _hcp > 0 ? () => setState(() => _hcp--) : null,
+                        onPressed:
+                        _hcp > 0 ? () => setState(() => _hcp--) : null,
                       ),
                       SizedBox(
                         width: 52,
@@ -656,7 +731,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
                       ),
                       IconButton.filledTonal(
                         icon: const Icon(Icons.add),
-                        onPressed: _hcp < 40 ? () => setState(() => _hcp++) : null,
+                        onPressed:
+                        _hcp < 40 ? () => setState(() => _hcp++) : null,
                       ),
                     ],
                   ),

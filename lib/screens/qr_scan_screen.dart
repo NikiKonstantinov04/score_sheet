@@ -13,6 +13,7 @@ class _QrScanScreenState extends State<QrScanScreen> with WidgetsBindingObserver
   final MobileScannerController controller = MobileScannerController();
   bool _hasPermission = false;
   bool _isLoading = true;
+  bool _hasScanned = false; // флаг срещу многократно засичане
 
   @override
   void initState() {
@@ -57,6 +58,23 @@ class _QrScanScreenState extends State<QrScanScreen> with WidgetsBindingObserver
     super.dispose();
   }
 
+  /// Обработва сканиран код – само първият се взема предвид.
+  Future<void> _onDetect(BarcodeCapture capture) async {
+    if (_hasScanned) return; // вече сканирахме – игнорираме
+    final barcodes = capture.barcodes;
+    if (barcodes.isEmpty) return;
+
+    final String? rawValue = barcodes.first.rawValue;
+    if (rawValue == null) return;
+
+    // Маркираме, че сме сканирали, и спираме камерата
+    _hasScanned = true;
+    await controller.stop();
+
+    if (!mounted) return;
+    Navigator.of(context).pop(rawValue);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -87,14 +105,7 @@ class _QrScanScreenState extends State<QrScanScreen> with WidgetsBindingObserver
       )
           : MobileScanner(
         controller: controller,
-        onDetect: (capture) {
-          final List<Barcode> barcodes = capture.barcodes;
-          final String? rawValue =
-          barcodes.isNotEmpty ? barcodes.first.rawValue : null;
-          if (rawValue != null) {
-            Navigator.of(context).pop(rawValue);
-          }
-        },
+        onDetect: _onDetect,
       ),
     );
   }

@@ -8,7 +8,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/qr_service.dart';
 import 'qr_scan_screen.dart';
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 /// Екран за провеждане на мач – показва игрите и позволява добавяне.
 class MatchScreen extends StatefulWidget {
@@ -16,8 +17,8 @@ class MatchScreen extends StatefulWidget {
   final Match? existingSingleMatch;
   final Match? existingTable1;
   final Match? existingTable2;
-  final String? savedMatchId;    // ID на запазения мач, ако е зареден
-  final String? savedMatchName;  // Име на запазения мач
+  final String? savedMatchId;
+  final String? savedMatchName;
 
   const MatchScreen({
     super.key,
@@ -40,6 +41,11 @@ class _MatchScreenState extends State<MatchScreen> {
   int _selectedTable = 1;
   String? _savedMatchId;
   String? _savedMatchName;
+
+  bool get _isMobile =>
+      !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
 
   @override
   void initState() {
@@ -91,7 +97,6 @@ class _MatchScreenState extends State<MatchScreen> {
     }
   }
 
-  /// Записва текущия мач в същия файл, ако има ID.
   Future<void> _autoSave() async {
     if (_savedMatchId == null || _savedMatchName == null) return;
 
@@ -108,7 +113,6 @@ class _MatchScreenState extends State<MatchScreen> {
     );
   }
 
-  /// Пита за име, ако мачът още не е запазван, и го записва.
   Future<void> _ensureSaved() async {
     if (_savedMatchId != null) return;
 
@@ -142,8 +146,7 @@ class _MatchScreenState extends State<MatchScreen> {
       ),
     );
 
-    if (!mounted) return; // защита след await
-
+    if (!mounted) return;
     if (name == null || name.isEmpty) return;
 
     final id = DateTime.now().millisecondsSinceEpoch.toString();
@@ -151,8 +154,7 @@ class _MatchScreenState extends State<MatchScreen> {
     _savedMatchName = name;
 
     await _autoSave();
-
-    if (!mounted) return; // защита след await
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Мачът "$name" е запазен')),
@@ -164,8 +166,8 @@ class _MatchScreenState extends State<MatchScreen> {
     if (currentMatch == null) return;
 
     await _ensureSaved();
-    if (!mounted) return; // <-- добавена проверка
-    if (_savedMatchId == null) return; // потребителят е отказал
+    if (!mounted) return;
+    if (_savedMatchId == null) return;
 
     final usedBoardNumbers =
     currentMatch.games.map((g) => g.board.number).toList();
@@ -179,8 +181,7 @@ class _MatchScreenState extends State<MatchScreen> {
       ),
     );
 
-    if (!mounted) return; // защита след await
-
+    if (!mounted) return;
     if (newGame == null) return;
 
     try {
@@ -202,7 +203,7 @@ class _MatchScreenState extends State<MatchScreen> {
     if (currentMatch == null) return;
     currentMatch.removeGameByBoardNumber(boardNumber);
     setState(() {});
-    _autoSave(); // не използва context
+    _autoSave();
   }
 
   Future<void> _clearAllGames() async {
@@ -230,8 +231,7 @@ class _MatchScreenState extends State<MatchScreen> {
       ),
     );
 
-    if (!mounted) return; // защита след await
-
+    if (!mounted) return;
     if (confirmed == true) {
       currentMatch.clear();
       setState(() {});
@@ -270,8 +270,7 @@ class _MatchScreenState extends State<MatchScreen> {
       ),
     );
 
-    if (!mounted) return; // защита след await
-
+    if (!mounted) return;
     if (editedGame == null) return;
 
     try {
@@ -288,11 +287,9 @@ class _MatchScreenState extends State<MatchScreen> {
     }
   }
 
-  /// Показва опции за QR обмен.
   Future<void> _showQrOptions() async {
     if (widget.mode != MatchMode.teamMatch) return;
 
-    // Проверка за поддръжка на QR скенер
     final bool canScan = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
     final action = await showDialog<String>(
@@ -326,7 +323,6 @@ class _MatchScreenState extends State<MatchScreen> {
     );
 
     if (!mounted) return;
-
     if (action == 'send') {
       await _sendQrData();
     } else if (action == 'scan') {
@@ -334,9 +330,7 @@ class _MatchScreenState extends State<MatchScreen> {
     }
   }
 
-  /// Генерира QR код с данните на избраната маса.
   Future<void> _sendQrData() async {
-    // Избор на маса
     final table = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
@@ -379,7 +373,7 @@ class _MatchScreenState extends State<MatchScreen> {
       builder: (context) => AlertDialog(
         title: Text('QR код за маса $table'),
         content: Container(
-          color: Colors.white, // бял фон
+          color: Colors.white,
           padding: const EdgeInsets.all(8),
           child: SizedBox(
             width: 250,
@@ -409,7 +403,6 @@ class _MatchScreenState extends State<MatchScreen> {
     );
   }
 
-  /// Сканира QR код и импортира данни в избраната маса.
   Future<void> _scanQrData() async {
     final scannedData = await Navigator.of(context).push<String>(
       MaterialPageRoute(
@@ -429,7 +422,6 @@ class _MatchScreenState extends State<MatchScreen> {
       return;
     }
 
-    // Питаме в коя маса да се импортира
     final targetTable = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
@@ -452,7 +444,6 @@ class _MatchScreenState extends State<MatchScreen> {
 
     if (targetTable == null || !mounted) return;
 
-    // Ако съответната маса вече има игри, предупреждаваме
     final targetMatch = targetTable == 1 ? _table1Match : _table2Match;
     if (targetMatch != null && targetMatch.games.isNotEmpty) {
       final confirm = await showDialog<bool>(
@@ -482,7 +473,6 @@ class _MatchScreenState extends State<MatchScreen> {
       } else {
         _table2Match = payload.match;
       }
-      // Сортираме за всеки случай
       if (targetTable == 1) {
         _table1Match?.sortGames();
       } else {
@@ -492,8 +482,41 @@ class _MatchScreenState extends State<MatchScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Данните от маса ${payload.tableNumber} са импортирани в маса $targetTable')),
+        SnackBar(
+            content: Text(
+                'Данните от маса ${payload.tableNumber} са импортирани в маса $targetTable')),
       );
+    }
+  }
+
+  Future<bool> _confirmDeleteGame(int boardNumber) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Изтриване на борд'),
+        content: Text('Сигурни ли сте, че искате да изтриете борд $boardNumber?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отказ'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Изтрий'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _removeGameWithConfirmation(int boardNumber) async {
+    final confirmed = await _confirmDeleteGame(boardNumber);
+    if (confirmed && mounted) {
+      _removeGame(boardNumber);
     }
   }
 
@@ -521,14 +544,16 @@ class _MatchScreenState extends State<MatchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentMatch = _getCurrentMatch();
     final theme = Theme.of(context);
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
         title: Text(widget.mode == MatchMode.singleTable ? 'Каре' : 'Отборен мач'),
         centerTitle: true,
+        toolbarHeight: isLandscape ? 44 : kToolbarHeight,
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -556,257 +581,384 @@ class _MatchScreenState extends State<MatchScreen> {
         ],
       ),
       body: SafeArea(
+        child: isLandscape
+            ? _buildLandscapeLayout(theme)
+            : _buildPortraitLayout(theme),
+      ),
+      bottomNavigationBar: isLandscape
+          ? null
+          : _buildPortraitBottomBar(theme),
+    );
+  }
+
+  /// Portrait layout – вертикален списък + долен панел.
+  Widget _buildPortraitLayout(ThemeData theme) {
+    return Column(
+      children: [
+        if (widget.mode == MatchMode.teamMatch) _buildTableSelector(),
+        Expanded(child: _buildGamesListOrEmpty(theme)),
+      ],
+    );
+  }
+
+  /// Landscape layout – списък отляво, странична лента отдясно.
+  Widget _buildLandscapeLayout(ThemeData theme) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Лява част: селектор + списък с игри
+        Expanded(
+          child: Column(
+            children: [
+              if (widget.mode == MatchMode.teamMatch) _buildTableSelector(),
+              Expanded(child: _buildGamesListOrEmpty(theme)),
+            ],
+          ),
+        ),
+        // Дясна част: странична лента
+        _buildLandscapeSidebar(theme),
+      ],
+    );
+  }
+
+  /// Селектор на маса (за отборен режим).
+  Widget _buildTableSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<int>(
+          segments: [
+            ButtonSegment(
+              value: 1,
+              label: Text('Маса 1 (${_table1Match?.games.length ?? 0})'),
+              icon: const Icon(Icons.table_restaurant),
+            ),
+            ButtonSegment(
+              value: 2,
+              label: Text('Маса 2 (${_table2Match?.games.length ?? 0})'),
+              icon: const Icon(Icons.table_restaurant),
+            ),
+          ],
+          selected: {_selectedTable},
+          onSelectionChanged: (newSelection) {
+            setState(() {
+              _selectedTable = newSelection.first;
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Списък с игрите или празно състояние.
+  Widget _buildGamesListOrEmpty(ThemeData theme) {
+    final currentMatch = _getCurrentMatch();
+
+    if (currentMatch == null) {
+      return const Center(child: Text('Няма създаден мач'));
+    }
+
+    if (currentMatch.games.isEmpty) {
+      return Center(
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (widget.mode == MatchMode.teamMatch)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: SegmentedButton<int>(
-                    segments: [
-                      ButtonSegment(
-                        value: 1,
-                        label: Text('Маса 1 (${_table1Match?.games.length ?? 0})'),
-                        icon: const Icon(Icons.table_restaurant),
-                      ),
-                      ButtonSegment(
-                        value: 2,
-                        label: Text('Маса 2 (${_table2Match?.games.length ?? 0})'),
-                        icon: const Icon(Icons.table_restaurant),
-                      ),
-                    ],
-                    selected: {_selectedTable},
-                    onSelectionChanged: (newSelection) {
-                      setState(() {
-                        _selectedTable = newSelection.first;
-                      });
-                    },
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.style_outlined,
+                size: 48,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Няма въведени игри',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Натиснете бутона по-долу, за да добавите борд',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: currentMatch.games.length,
+      itemBuilder: (context, index) {
+        final game = currentMatch.games[index];
+        final declarerIsNS = game.declarer == Direction.north ||
+            game.declarer == Direction.south;
+        final displayScore = declarerIsNS ? game.score : -game.score;
+        final isPositive = displayScore >= 0;
+        final suitColor = _getSuitColor(context, game.contract.suit);
+
+        return Dismissible(
+          key: Key('game_${game.board.number}'),
+          direction: DismissDirection.endToStart,
+          confirmDismiss: (direction) async {
+            return await _confirmDeleteGame(game.board.number);
+          },
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.delete_outline,
+              color: theme.colorScheme.onErrorContainer,
+            ),
+          ),
+          onDismissed: (_) => _removeGame(game.board.number),
+          child: Card(
+            elevation: 0,
+            color: theme.colorScheme.surfaceContainerLowest,
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+            child: ListTile(
+              contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              onTap: () => _editGame(game),
+              leading: CircleAvatar(
+                radius: 20,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Text(
+                  '${game.board.number}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onPrimaryContainer,
                   ),
                 ),
               ),
+              title: Row(
+                children: [
+                  Text(
+                    '${game.contract.level}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  Text(
+                    game.contract.suit.symbol,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 20,
+                      color: suitColor,
+                    ),
+                  ),
+                  if (game.contract.doubled)
+                    const Text(' X',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.red)),
+                  if (game.contract.redoubled)
+                    const Text(' XX',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.blue)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'от ${_getDeclarerLetter(game.declarer)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: Text(
+                'Взети: ${game.tricksWon} взятки',
+                style: theme.textTheme.bodySmall,
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isPositive
+                          ? Colors.green.withValues(alpha: 0.1)
+                          : Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${isPositive ? "+$displayScore" : displayScore}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: isPositive
+                            ? Colors.green.shade700
+                            : Colors.red.shade700,
+                      ),
+                    ),
+                  ),
+                  if (!_isMobile)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () =>
+                          _removeGameWithConfirmation(game.board.number),
+                      tooltip: 'Изтрий борд',
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
-            if (currentMatch == null)
-              const Expanded(
-                child: Center(child: Text('Няма създаден мач')),
-              )
-            else if (currentMatch.games.isEmpty)
-              Expanded(
-                child: Center(
+  /// Долен панел за portrait.
+  Widget _buildPortraitBottomBar(ThemeData theme) {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.style_outlined,
-                          size: 48,
-                          color: theme.colorScheme.primary,
+                      Text(
+                        'ТЕКУЩ РЕЗУЛТАТ',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 2),
                       Text(
-                        'Няма въведени игри',
+                        _getSummary(),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Натиснете бутона по-долу, за да добавите борд',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
                     ],
                   ),
                 ),
-              )
-            else
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: currentMatch.games.length,
-                  itemBuilder: (context, index) {
-                    final game = currentMatch.games[index];
-                    final declarerIsNS = game.declarer == Direction.north ||
-                        game.declarer == Direction.south;
-// Показваме резултата от гледна точка на NS (това е стандартът в бриджа)
-                    final displayScore = declarerIsNS ? game.score : -game.score;
-                    final isPositive = displayScore >= 0;
-                    final suitColor = _getSuitColor(context, game.contract.suit);
-
-                    return Dismissible(
-                      key: Key('game_${game.board.number}'),
-                      direction: DismissDirection.endToStart,
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 20),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.errorContainer,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Icon(
-                          Icons.delete_outline,
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                      onDismissed: (_) => _removeGame(game.board.number),
-                      child: Card(
-                        elevation: 0,
-                        color: theme.colorScheme.surfaceContainerLowest,
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(color: theme.colorScheme.outlineVariant),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                          onTap: () => _editGame(game),
-                          leading: CircleAvatar(
-                            radius: 20,
-                            backgroundColor: theme.colorScheme.primaryContainer,
-                            child: Text(
-                              '${game.board.number}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ),
-                          title: Row(
-                            children: [
-                              Text(
-                                '${game.contract.level}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                              ),
-                              Text(
-                                game.contract.suit.symbol,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 20,
-                                  color: suitColor,
-                                ),
-                              ),
-                              if (game.contract.doubled)
-                                const Text(' X', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                              if (game.contract.redoubled)
-                                const Text(' XX', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                              const SizedBox(width: 8),
-                              Text(
-                                'от ${_getDeclarerLetter(game.declarer)}',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Text(
-                            'Взети: ${game.tricksWon} взятки',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: isPositive
-                                  ? Colors.green.withValues(alpha: 0.1)
-                                  : Colors.red.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${isPositive ? "+$displayScore" : displayScore}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                color: isPositive ? Colors.green.shade700 : Colors.red.shade700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: _showResults,
+                  icon: const Icon(Icons.bar_chart_rounded, size: 20),
+                  label: const Text('Карта'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
+              onPressed: _addGame,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text(
+                'ДОБАВИ БОРД',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 8,
-                offset: const Offset(0, -2),
+    );
+  }
+
+  /// Странична лента за landscape.
+  Widget _buildLandscapeSidebar(ThemeData theme) {
+    return Container(
+      width: 280,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        border: Border(
+          left: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'ТЕКУЩ РЕЗУЛТАТ',
+              style: theme.textTheme.labelSmall?.copyWith(
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'ТЕКУЩ РЕЗУЛТАТ',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            letterSpacing: 1.1,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _getSummary(),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: _showResults,
-                    icon: const Icon(Icons.bar_chart_rounded, size: 20),
-                    label: const Text('Карта'),
-                  ),
-                ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _getSummary(),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: _addGame,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text(
-                  'ДОБАВИ БОРД',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
-            ],
-          ),
+              onPressed: _showResults,
+              icon: const Icon(Icons.bar_chart_rounded, size: 20),
+              label: const Text('КАРТА'),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(56),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: _addGame,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text(
+                'ДОБАВИ БОРД',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
         ),
       ),
     );

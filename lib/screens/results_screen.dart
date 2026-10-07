@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/models.dart';
 import '../scoring/scoring.dart';
 import '../scoring/kare.dart';
@@ -21,8 +22,17 @@ class ResultsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(mode == MatchMode.singleTable ? 'Резултати (Каре)' : 'Резултати (Отборно)'),
+        title: Text(mode == MatchMode.singleTable
+            ? 'Резултати (Каре)'
+            : 'Резултати (Отборно)'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            tooltip: 'Копирай резултатите',
+            onPressed: () => _exportResults(context),
+          ),
+        ],
       ),
       body: SafeArea(
         child: mode == MatchMode.singleTable
@@ -43,6 +53,114 @@ class ResultsScreen extends StatelessWidget {
         return 'S';
       case Direction.west:
         return 'W';
+    }
+  }
+
+  /// Показва SnackBar.
+  void _showSnack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  /// Експортира резултатите като текст в клипборда.
+  Future<void> _exportResults(BuildContext context) async {
+    final buffer = StringBuffer();
+
+    if (mode == MatchMode.singleTable) {
+      final match = singleMatch;
+      if (match == null || match.games.isEmpty) {
+        _showSnack(context, 'Няма резултати за експорт');
+        return;
+      }
+
+      final scoring = MatchScoring.single(match);
+      buffer.writeln('Bridge Scorer – Резултати (Каре)');
+      buffer.writeln('=' * 60);
+      buffer.writeln();
+      buffer.writeln(
+          'Борд | Договор | От | HCP | Задълж. | Резултат | Нетен | IMP (NS)');
+      buffer.writeln('-' * 60);
+
+      for (final game in match.games) {
+        final declarerIsNS = game.declarer == Direction.north ||
+            game.declarer == Direction.south;
+        final commitment = game.hcp != null
+            ? getCommitmentForSide(game.hcp!, game.board.zone, declarerIsNS)
+            : 0;
+        final nsScore = declarerIsNS ? game.score : -game.score;
+        final netScore =
+        declarerIsNS ? nsScore - commitment : nsScore + commitment;
+        final imp =
+        scoring.getBoardImps(game.board.number, perspectiveNS: true);
+        final contractStr = '${game.contract.level}${game.contract.suit.symbol}'
+            '${game.contract.doubled ? " X" : ""}'
+            '${game.contract.redoubled ? " XX" : ""}';
+
+        buffer.writeln(
+          '${game.board.number} | $contractStr | ${_getDeclarerLetter(game.declarer)} '
+              '| ${game.hcp ?? "-"} | $commitment | $nsScore | $netScore | $imp',
+        );
+      }
+
+      final impsNS = scoring.getTotalImps(perspectiveNS: true);
+      buffer.writeln('-' * 60);
+      buffer.writeln('Общо IMP – NS: +$impsNS  |  EW: ${-impsNS}');
+    } else {
+      if (table1 == null || table2 == null) {
+        _showSnack(context, 'Няма данни за експорт');
+        return;
+      }
+
+      final teamMatch = TeamMatch(table1: table1!, table2: table2!);
+      final boardNumbers = <int>{};
+      boardNumbers.addAll(table1!.games.map((g) => g.board.number));
+      boardNumbers.addAll(table2!.games.map((g) => g.board.number));
+      final sorted = boardNumbers.toList()..sort();
+
+      buffer.writeln('Bridge Scorer – Резултати (Отборно)');
+      buffer.writeln('=' * 60);
+      buffer.writeln();
+      buffer.writeln('Борд | Маса 1 | От | Маса 2 | От | IMP (A) | IMP (B)');
+      buffer.writeln('-' * 60);
+
+      for (final boardNumber in sorted) {
+        final game1 = table1!.getGameByBoardNumber(boardNumber);
+        final game2 = table2!.getGameByBoardNumber(boardNumber);
+
+        final c1 = game1 != null
+            ? '${game1.contract.level}${game1.contract.suit.symbol}'
+            '${game1.contract.doubled ? " X" : ""}'
+            '${game1.contract.redoubled ? " XX" : ""}'
+            : '--';
+        final d1 = game1 != null ? _getDeclarerLetter(game1.declarer) : '--';
+        final c2 = game2 != null
+            ? '${game2.contract.level}${game2.contract.suit.symbol}'
+            '${game2.contract.doubled ? " X" : ""}'
+            '${game2.contract.redoubled ? " XX" : ""}'
+            : '--';
+        final d2 = game2 != null ? _getDeclarerLetter(game2.declarer) : '--';
+
+        int impA = 0;
+        int impB = 0;
+        try {
+          impA = teamMatch.getBoardImpsForTeamA(boardNumber);
+          impB = -impA;
+        } catch (_) {
+          // непълен борд – пропускаме
+        }
+
+        buffer.writeln('$boardNumber | $c1 | $d1 | $c2 | $d2 | $impA | $impB');
+      }
+
+      final teamA = teamMatch.getTotalImpsForTeamA();
+      buffer.writeln('-' * 60);
+      buffer.writeln('Общо IMP – Отбор A: +$teamA  |  Отбор B: ${-teamA}');
+    }
+
+    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    if (context.mounted) {
+      _showSnack(context, 'Резултатите са копирани в клипборда');
     }
   }
 
@@ -71,7 +189,8 @@ class ResultsScreen extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            Icon(Icons.table_chart_outlined, size: 20, color: Theme.of(context).colorScheme.primary),
+            Icon(Icons.table_chart_outlined,
+                size: 20, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 8),
             Text(
               'Детайли по бордове',
@@ -103,28 +222,53 @@ class ResultsScreen extends StatelessWidget {
                       horizontalMargin: 16,
                       columnSpacing: 16,
                       headingRowColor: WidgetStateProperty.all(
-                        Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                        Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.6),
                       ),
                       columns: const [
-                        DataColumn(label: Text('Борд', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Договор', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('От', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('HCP', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('Задълж.', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('Резултат', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('Нетен', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('IMP (NS)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(
+                            label: Text('Борд',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Договор',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('От',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('HCP',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            numeric: true),
+                        DataColumn(
+                            label: Text('Задълж.',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            numeric: true),
+                        DataColumn(
+                            label: Text('Резултат',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            numeric: true),
+                        DataColumn(
+                            label: Text('Нетен',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            numeric: true),
+                        DataColumn(
+                            label: Text('IMP (NS)',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            numeric: true),
                       ],
                       rows: match.games.map((game) {
-                        final declarerIsNS = game.declarer == Direction.north ||
-                            game.declarer == Direction.south;
+                        final declarerIsNS =
+                            game.declarer == Direction.north ||
+                                game.declarer == Direction.south;
 
                         final commitment = game.hcp != null
-                            ? getCommitmentForSide(game.hcp!, game.board.zone, declarerIsNS)
+                            ? getCommitmentForSide(
+                            game.hcp!, game.board.zone, declarerIsNS)
                             : 0;
 
                         final nsScore = declarerIsNS ? game.score : -game.score;
-
                         final netScore = declarerIsNS
                             ? nsScore - commitment
                             : nsScore + commitment;
@@ -139,18 +283,22 @@ class ResultsScreen extends StatelessWidget {
                             DataCell(
                               CircleAvatar(
                                 radius: 14,
-                                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                                backgroundColor:
+                                Theme.of(context).colorScheme.primaryContainer,
                                 child: Text(
                                   '${game.board.number}',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer,
                                   ),
                                 ),
                               ),
                             ),
-                            DataCell(_buildFormattedContract(context, game.contract)),
+                            DataCell(
+                                _buildFormattedContract(context, game.contract)),
                             DataCell(Text(
                               _getDeclarerLetter(game.declarer),
                               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -203,7 +351,8 @@ class ResultsScreen extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            Icon(Icons.table_chart_outlined, size: 20, color: Theme.of(context).colorScheme.primary),
+            Icon(Icons.table_chart_outlined,
+                size: 20, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 8),
             Text(
               'Сравнение по бордове',
@@ -231,18 +380,39 @@ class ResultsScreen extends StatelessWidget {
                     constraints: BoxConstraints(minWidth: constraints.maxWidth),
                     child: DataTable(
                       headingRowHeight: 48,
-                      dataRowMaxHeight: 52,
-                      horizontalMargin: 24,
-                      columnSpacing: 24,
+                      dataRowMaxHeight: 56,
+                      horizontalMargin: 16,
+                      columnSpacing: 16,
                       headingRowColor: WidgetStateProperty.all(
-                        Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                        Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.6),
                       ),
                       columns: const [
-                        DataColumn(label: Text('Борд', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('От A', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('От B', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('IMP (A)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
-                        DataColumn(label: Text('IMP (B)', style: TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                        DataColumn(
+                            label: Text('Борд',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Маса 1',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('От',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('Маса 2',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('От',
+                                style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                            label: Text('IMP (A)',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            numeric: true),
+                        DataColumn(
+                            label: Text('IMP (B)',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                            numeric: true),
                       ],
                       rows: sortedBoardNumbers.map((boardNumber) {
                         int impA = 0;
@@ -254,42 +424,58 @@ class ResultsScreen extends StatelessWidget {
                           isComplete = true;
                         } catch (_) {}
 
-                        // Вземаме декларанта от всяка маса
                         final game1 = table1!.getGameByBoardNumber(boardNumber);
                         final game2 = table2!.getGameByBoardNumber(boardNumber);
-                        final declarer1 = game1 != null ? _getDeclarerLetter(game1.declarer) : '--';
-                        final declarer2 = game2 != null ? _getDeclarerLetter(game2.declarer) : '--';
 
                         return DataRow(
                           cells: [
                             DataCell(
                               CircleAvatar(
                                 radius: 14,
-                                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                                backgroundColor:
+                                Theme.of(context).colorScheme.primaryContainer,
                                 child: Text(
                                   '$boardNumber',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer,
                                   ),
                                 ),
                               ),
                             ),
+                            DataCell(
+                              game1 != null
+                                  ? _buildFormattedContract(
+                                  context, game1.contract)
+                                  : const Text('--'),
+                            ),
                             DataCell(Text(
-                              declarer1,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            )),
-                            DataCell(Text(
-                              declarer2,
+                              game1 != null
+                                  ? _getDeclarerLetter(game1.declarer)
+                                  : '--',
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             )),
                             DataCell(
-                              isComplete ? _buildImpBadge(context, impA) : const Text('--'),
+                              game2 != null
+                                  ? _buildFormattedContract(
+                                  context, game2.contract)
+                                  : const Text('--'),
                             ),
-                            DataCell(
-                              isComplete ? _buildImpBadge(context, impB) : const Text('--'),
-                            ),
+                            DataCell(Text(
+                              game2 != null
+                                  ? _getDeclarerLetter(game2.declarer)
+                                  : '--',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            )),
+                            DataCell(isComplete
+                                ? _buildImpBadge(context, impA)
+                                : const Text('--')),
+                            DataCell(isComplete
+                                ? _buildImpBadge(context, impB)
+                                : const Text('--')),
                           ],
                         );
                       }).toList(),
@@ -375,8 +561,10 @@ class ResultsScreen extends StatelessWidget {
     final formattedValue = value > 0 ? '+$value' : '$value';
 
     final bool isDark = theme.brightness == Brightness.dark;
-    final Color positiveColor = isDark ? Colors.green.shade400 : Colors.green.shade700;
-    final Color negativeColor = isDark ? Colors.red.shade400 : Colors.red.shade700;
+    final Color positiveColor =
+    isDark ? Colors.green.shade400 : Colors.green.shade700;
+    final Color negativeColor =
+    isDark ? Colors.red.shade400 : Colors.red.shade700;
 
     return Column(
       children: [
@@ -409,13 +597,17 @@ class ResultsScreen extends StatelessWidget {
 
     switch (contract.suit) {
       case Suit.club:
-        suitColor = brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade800;
+        suitColor =
+        brightness == Brightness.dark ? Colors.grey.shade400 : Colors.grey.shade800;
         break;
       case Suit.diamond:
-        suitColor = brightness == Brightness.dark ? Colors.orange.shade400 : Colors.orange.shade800;
+        suitColor = brightness == Brightness.dark
+            ? Colors.orange.shade400
+            : Colors.orange.shade800;
         break;
       case Suit.heart:
-        suitColor = brightness == Brightness.dark ? Colors.red.shade400 : Colors.red.shade700;
+        suitColor =
+        brightness == Brightness.dark ? Colors.red.shade400 : Colors.red.shade700;
         break;
       case Suit.spade:
       case Suit.noTrump:
@@ -436,14 +628,17 @@ class ResultsScreen extends StatelessWidget {
           ),
           TextSpan(
             text: contract.suit.symbol,
-            style: TextStyle(fontWeight: FontWeight.bold, color: suitColor, fontSize: 16),
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: suitColor, fontSize: 16),
           ),
           if (contract.doubled)
             TextSpan(
               text: ' X',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: brightness == Brightness.dark ? Colors.red.shade400 : Colors.red.shade700,
+                color: brightness == Brightness.dark
+                    ? Colors.red.shade400
+                    : Colors.red.shade700,
               ),
             ),
           if (contract.redoubled)
@@ -451,7 +646,9 @@ class ResultsScreen extends StatelessWidget {
               text: ' XX',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: brightness == Brightness.dark ? Colors.blue.shade400 : Colors.blue.shade700,
+                color: brightness == Brightness.dark
+                    ? Colors.blue.shade400
+                    : Colors.blue.shade700,
               ),
             ),
         ],
@@ -462,8 +659,10 @@ class ResultsScreen extends StatelessWidget {
   Widget _buildScoreText(BuildContext context, int score) {
     final theme = Theme.of(context);
     final bool isDark = theme.brightness == Brightness.dark;
-    final Color positiveColor = isDark ? Colors.green.shade400 : Colors.green.shade700;
-    final Color negativeColor = isDark ? Colors.red.shade400 : Colors.red.shade700;
+    final Color positiveColor =
+    isDark ? Colors.green.shade400 : Colors.green.shade700;
+    final Color negativeColor =
+    isDark ? Colors.red.shade400 : Colors.red.shade700;
 
     return Text(
       score > 0 ? '+$score' : '$score',
@@ -481,8 +680,10 @@ class ResultsScreen extends StatelessWidget {
   Widget _buildImpBadge(BuildContext context, int imp) {
     final theme = Theme.of(context);
     final bool isDark = theme.brightness == Brightness.dark;
-    final Color positiveColor = isDark ? Colors.green.shade400 : Colors.green.shade700;
-    final Color negativeColor = isDark ? Colors.red.shade400 : Colors.red.shade700;
+    final Color positiveColor =
+    isDark ? Colors.green.shade400 : Colors.green.shade700;
+    final Color negativeColor =
+    isDark ? Colors.red.shade400 : Colors.red.shade700;
 
     final Color bgColor = imp > 0
         ? positiveColor.withValues(alpha: 0.15)
@@ -516,7 +717,8 @@ class ResultsScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.bar_chart_rounded, size: 64, color: theme.colorScheme.outlineVariant),
+          Icon(Icons.bar_chart_rounded,
+              size: 64, color: theme.colorScheme.outlineVariant),
           const SizedBox(height: 16),
           Text(
             'Няма налични резултати',

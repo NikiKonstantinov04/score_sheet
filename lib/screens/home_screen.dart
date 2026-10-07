@@ -3,6 +3,7 @@ import '../scoring/scoring.dart';
 import '../services/storage_service.dart';
 import 'match_screen.dart';
 import 'load_match_screen.dart';
+import '../services/theme_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +30,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Превключва темата между System → Light → Dark → System.
+  void _cycleTheme(ThemeMode current) {
+    switch (current) {
+      case ThemeMode.system:
+        ThemeService.setThemeMode(ThemeMode.light);
+        break;
+      case ThemeMode.light:
+        ThemeService.setThemeMode(ThemeMode.dark);
+        break;
+      case ThemeMode.dark:
+        ThemeService.setThemeMode(ThemeMode.system);
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -46,77 +62,119 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(24.0),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: constraints.maxHeight - 48,
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Icon(
-                        Icons.style,
-                        size: 80,
-                        color: theme.colorScheme.primary,
+          child: Stack(
+            children: [
+              // Основното съдържание
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.all(24.0),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight - 48,
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Bridge Scorer',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.headlineLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                        ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Icon(
+                            Icons.style,
+                            size: 80,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Bridge Scorer',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.headlineLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Изберете режим на игра',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 40),
+                          _buildModeCard(
+                            context,
+                            mode: MatchMode.singleTable,
+                            title: 'Каре',
+                            subtitle: 'Една маса • HCP задължения',
+                            icon: Icons.table_restaurant,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildModeCard(
+                            context,
+                            mode: MatchMode.teamMatch,
+                            title: 'Отборно',
+                            subtitle: 'Две маси • Сравнение на резултати',
+                            icon: Icons.groups,
+                          ),
+                          const SizedBox(height: 40),
+                          FilledButton.icon(
+                            onPressed: _startMatch,
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: const Text('Започни нов мач'),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _loadSavedMatch,
+                            icon: const Icon(Icons.folder_open),
+                            label: Text(
+                              _savedMatchesCount > 0
+                                  ? 'Зареди запазен мач ($_savedMatchesCount)'
+                                  : 'Зареди запазен мач',
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Изберете режим на игра',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                    ),
+                  );
+                },
+              ),
+
+              // Бутон за тема – плаващ в горния десен ъгъл
+              Positioned(
+                top: 8,
+                right: 8,
+                child: ValueListenableBuilder<ThemeMode>(
+                  valueListenable: ThemeService.themeMode,
+                  builder: (context, currentMode, _) {
+                    IconData icon;
+                    String tooltip;
+                    switch (currentMode) {
+                      case ThemeMode.system:
+                        icon = Icons.brightness_auto;
+                        tooltip = 'Тема: системна';
+                        break;
+                      case ThemeMode.light:
+                        icon = Icons.light_mode;
+                        tooltip = 'Тема: светла';
+                        break;
+                      case ThemeMode.dark:
+                        icon = Icons.dark_mode;
+                        tooltip = 'Тема: тъмна';
+                        break;
+                    }
+                    return Material(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.7),
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        icon: Icon(icon),
+                        tooltip: tooltip,
+                        onPressed: () => _cycleTheme(currentMode),
                       ),
-                      const SizedBox(height: 40),
-                      _buildModeCard(
-                        context,
-                        mode: MatchMode.singleTable,
-                        title: 'Каре',
-                        subtitle: 'Една маса • HCP задължения',
-                        icon: Icons.table_restaurant,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildModeCard(
-                        context,
-                        mode: MatchMode.teamMatch,
-                        title: 'Отборно',
-                        subtitle: 'Две маси • Сравнение на резултати',
-                        icon: Icons.groups,
-                      ),
-                      const SizedBox(height: 40),
-                      FilledButton.icon(
-                        onPressed: _startMatch,
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: const Text('Започни нов мач'),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: _loadSavedMatch,
-                        icon: const Icon(Icons.folder_open),
-                        label: Text(
-                          _savedMatchesCount > 0
-                              ? 'Зареди запазен мач ($_savedMatchesCount)'
-                              : 'Зареди запазен мач',
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-              );
-            },
+              ),
+            ],
           ),
         ),
       ),
