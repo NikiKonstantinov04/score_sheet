@@ -3,3 +3,4 @@ export 'board.dart';
 export 'contract.dart';
 export 'game.dart';
 export 'match.dart';
+export 'bid.dart';

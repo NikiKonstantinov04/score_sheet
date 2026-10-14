@@ -1,6 +1,7 @@
 import 'enums.dart';
 import 'board.dart';
 import 'contract.dart';
+import 'bid.dart';
 
 /// Игра (раздаване) – съдържа борд, договор, декларант и брой взети взятки.
 class Game {
@@ -9,6 +10,7 @@ class Game {
   final Direction declarer;
   final int tricksWon;
   final int? hcp; // оньорни точки на линията (само за каре)
+  final List<Bid> bidding;
 
   Game({
     required this.board,
@@ -16,6 +18,7 @@ class Game {
     required this.declarer,
     required this.tricksWon,
     this.hcp,
+    this.bidding = const [],
   }) {
     if (tricksWon < 0 || tricksWon > 13) {
       throw ArgumentError('Броят взети взятки трябва да е между 0 и 13.');
@@ -184,6 +187,8 @@ class Game {
     'declarer': declarer.name,
     'tricksWon': tricksWon,
     'hcp': hcp,
+    if (bidding.isNotEmpty)
+      'bidding': bidding.map((b) => b.toJson()).toList(),
   };
 
   factory Game.fromJson(Map<String, dynamic> json) {

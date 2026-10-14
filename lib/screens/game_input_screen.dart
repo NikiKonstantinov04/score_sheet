@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
+import 'bidding_input_screen.dart';
 
 /// Формуляр за въвеждане на нова игра.
 class GameInputScreen extends StatefulWidget {
@@ -26,6 +27,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
   Direction _declarer = Direction.north;
   bool _doubled = false;
   bool _redoubled = false;
+  List<Bid> _bidding = [];
 
   int _tricks = 7;
   int _hcp = 0;
@@ -43,6 +45,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
       _declarer = game.declarer;
       _tricks = game.tricksWon;
       _hcp = widget.showHcpField ? (game.hcp ?? 20) : 0;
+      _bidding = List.from(game.bidding);
     } else {
       int nextBoardNumber = 1;
       while (widget.usedBoardNumbers.contains(nextBoardNumber)) {
@@ -143,8 +146,40 @@ class _GameInputScreenState extends State<GameInputScreen> {
       contract: contract,
       declarer: _declarer,
       tricksWon: _tricks,
+      bidding: _bidding,
       hcp: widget.showHcpField ? _hcp : null,
     );
+  }
+
+  /// Отваря екран за въвеждане на анонси.
+  Future<void> _editBidding() async {
+    final result = await Navigator.of(context).push<List<Bid>>(
+      MaterialPageRoute(
+        builder: (context) => BiddingInputScreen(
+          board: _currentBoard,
+          initialBidding: _bidding,
+        ),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _bidding = result;
+
+        // Извличаме договора и декларанта от анонсите.
+        final analysis = analyzeBidding(_bidding, _currentBoard.dealer);
+        if (analysis.contract != null) {
+          _level = analysis.contract!.level;
+          _suit = analysis.contract!.suit;
+          _doubled = analysis.contract!.doubled;
+          _redoubled = analysis.contract!.redoubled;
+          // Ако взетките са под минимума – повишаваме ги.
+          if (_tricks < 6 + _level) _tricks = 6 + _level;
+        }
+        if (analysis.declarer != null) {
+          _declarer = analysis.declarer!;
+        }
+      });
+    }
   }
 
   /// Модален прозорец за бърз и неограничен избор на борд
@@ -186,7 +221,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
                   Expanded(
                     child: GridView.builder(
                       controller: scrollController,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 4,
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10,
@@ -213,7 +249,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
                               color: isSelected
                                   ? theme.colorScheme.primary
                                   : isUsed
-                                  ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
+                                  ? theme.colorScheme.surfaceContainerHighest
+                                  .withValues(alpha: 0.4)
                                   : theme.colorScheme.surfaceContainerHigh,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
@@ -234,7 +271,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
                                     color: isSelected
                                         ? theme.colorScheme.onPrimary
                                         : isUsed
-                                        ? theme.colorScheme.onSurface.withValues(alpha: 0.38)
+                                        ? theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.38)
                                         : theme.colorScheme.onSurface,
                                   ),
                                 ),
@@ -243,7 +281,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
                                     'игран',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.38),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.38),
                                     ),
                                   ),
                               ],
@@ -312,6 +351,8 @@ class _GameInputScreenState extends State<GameInputScreen> {
         const SizedBox(height: 12),
         _buildDeclarerCard(theme),
         const SizedBox(height: 12),
+        _buildBiddingCard(theme),
+        const SizedBox(height: 12),
         _buildResultCard(theme),
         const SizedBox(height: 16),
         _buildPreview(theme),
@@ -322,7 +363,7 @@ class _GameInputScreenState extends State<GameInputScreen> {
   /// Landscape layout – 2 реда × 2 колони.
   /// Ред 1: Борд | Контракт
   /// Ред 2: Декларант | Резултат
-  /// Отдолу: Preview
+  /// Отдолу: Анонси + Preview
   Widget _buildLandscapeLayout(ThemeData theme) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -352,6 +393,9 @@ class _GameInputScreenState extends State<GameInputScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          // Анонси – на цялата ширина
+          _buildBiddingCard(theme),
           const SizedBox(height: 12),
           _buildPreview(theme),
         ],
@@ -638,6 +682,75 @@ class _GameInputScreenState extends State<GameInputScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBiddingCard(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: InkWell(
+        onTap: _editBidding,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Анонси',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  Icon(
+                    Icons.edit_outlined,
+                    size: 20,
+                    color: theme.colorScheme.primary.withValues(alpha: 0.7),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_bidding.isEmpty)
+                Text(
+                  'Натиснете, за да въведете анонсите',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _bidding.map((b) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        b.display,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
         ),
       ),
     );
